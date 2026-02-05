@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Drawer Cut List Calculator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-dark: #1a1d23;
+  --bg-sidebar: #22262e;
+  --bg-main: #f5f0e8;
+  --bg-card: #ffffff;
+  --accent: #c88a2e;
+  --accent-light: #e0a840;
+  --accent-dark: #a06e1c;
+  --text-dark: #1a1d23;
+  --text-light: #f5f0e8;
+  --text-muted: #8a8d94;
+  --border: #ddd5c8;
+  --danger: #c0392b;
+  --danger-light: #e74c3c;
+  --success: #27ae60;
+  --sidebar-w: 280px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg-main);color:var(--text-dark);height:100vh;height:100dvh;overflow:hidden;-webkit-tap-highlight-color:transparent;}
+.mono{font-family:'JetBrains Mono',monospace;}
+
+/* LAYOUT */
+.app{display:none;height:100vh;height:100dvh;}
+.app.ready{display:flex;}
+.sidebar{width:var(–sidebar-w);min-width:var(–sidebar-w);background:var(–bg-sidebar);color:var(–text-light);display:flex;flex-direction:column;border-right:3px solid var(–accent);z-index:100;transition:transform .3s ease;}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.topbar{background:var(–bg-card);border-bottom:2px solid var(–border);padding:10px 16px;display:flex;align-items:center;gap:8px;min-height:50px;}
+.workspace{flex:1;overflow-y:auto;padding:20px;-webkit-overflow-scrolling:touch;}
+
+/* HAMBURGER */
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:6px;flex-shrink:0;}
+.hamburger span{display:block;width:22px;height:2.5px;background:var(–text-dark);margin:4px 0;border-radius:2px;}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99;}
+
+/* SIDEBAR */
+.sidebar-header{padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:space-between;}
+.sidebar-header-text h1{font-size:14px;font-weight:700;color:var(–accent-light);letter-spacing:.5px;text-transform:uppercase;}
+.sidebar-header-text p{font-size:10px;color:var(–text-muted);margin-top:1px;}
+.sidebar-close{display:none;background:none;border:none;color:var(–text-muted);font-size:22px;cursor:pointer;padding:4px 8px;}
+.sidebar-actions{padding:8px 10px;display:flex;gap:6px;border-bottom:1px solid rgba(255,255,255,0.08);}
+.sidebar-bottom{padding:8px 10px;border-top:1px solid rgba(255,255,255,0.08);}
+.sidebar-tree{flex:1;overflow-y:auto;padding:6px 0;-webkit-overflow-scrolling:touch;}
+.job-item{user-select:none;}
+.job-header{display:flex;align-items:center;padding:8px 12px;cursor:pointer;font-size:13px;font-weight:600;transition:background .15s;gap:6px;}
+.job-header:hover{background:rgba(255,255,255,0.06);}
+.job-header.active{background:rgba(200,138,46,0.15);color:var(–accent-light);}
+.job-header .arrow{font-size:10px;transition:transform .2s;width:16px;text-align:center;flex-shrink:0;}
+.job-header .arrow.open{transform:rotate(90deg);}
+.job-header .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ibtn{background:none;border:none;color:var(–text-muted);cursor:pointer;padding:4px 5px;font-size:13px;border-radius:3px;line-height:1;}
+.ibtn:hover{background:rgba(255,255,255,0.1);color:var(–text-light);}
+.job-lists{padding-left:16px;overflow:hidden;}
+.list-item{display:flex;align-items:center;padding:7px 12px;cursor:pointer;font-size:12px;transition:background .15s;gap:6px;color:#b0b3ba;}
+.list-item:hover{background:rgba(255,255,255,0.04);color:var(–text-light);}
+.list-item.active{background:rgba(200,138,46,0.2);color:var(–accent-light);font-weight:600;}
+.list-item .dot{width:5px;height:5px;border-radius:50%;background:var(–accent);flex-shrink:0;}
+.list-item .list-actions{display:flex;gap:2px;flex-shrink:0;margin-left:auto;}
+
+/* BUTTONS */
+.btn{font-family:‘DM Sans’,sans-serif;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;padding:7px 12px;transition:all .15s;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
+.btn-sm{padding:5px 9px;font-size:11px;}
+.btn-accent{background:var(–accent);color:#fff;}
+.btn-accent:hover:not(:disabled){background:var(–accent-light);}
+.btn-dark{background:var(–bg-dark);color:var(–text-light);}
+.btn-dark:hover:not(:disabled){background:#2a2e36;}
+.btn-outline{background:transparent;border:1.5px solid var(–border);color:var(–text-dark);}
+.btn-outline:hover:not(:disabled){border-color:var(–accent);color:var(–accent);}
+.btn-danger{background:var(–danger);color:#fff;}
+.btn-danger:hover:not(:disabled){background:var(–danger-light);}
+.btn-ghost{background:transparent;color:var(–text-muted);padding:4px 6px;}
+.btn-ghost:hover{color:var(–danger);}
+.btn-sidebar{background:rgba(255,255,255,0.08);color:var(–text-light);font-size:11px;padding:6px 10px;flex:1;}
+.btn-sidebar:hover{background:rgba(255,255,255,0.14);}
+.btn-icon{background:none;border:none;cursor:pointer;padding:6px;font-size:16px;color:var(–text-muted);border-radius:4px;line-height:1;}
+.btn-icon:hover{background:rgba(0,0,0,0.06);color:var(–text-dark);}
+.btn-icon:disabled{opacity:.3;cursor:default;}
+
+/* SYNC STATUS */
+.sync-badge{font-size:10px;padding:3px 8px;border-radius:10px;font-weight:600;letter-spacing:.3px;display:inline-flex;align-items:center;gap:4px;}
+.sync-saved{background:rgba(39,174,96,0.15);color:var(–success);}
+.sync-saving{background:rgba(200,138,46,0.15);color:var(–accent);}
+.sync-error{background:rgba(192,57,43,0.15);color:var(–danger);}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sync-saving .sync-dot{animation:pulse 1s infinite;}
+
+/* DRAWER CARDS (mobile) */
+.drawer-card{background:var(–bg-card);border:1.5px solid var(–border);border-radius:8px;margin-bottom:10px;overflow:hidden;}
+.drawer-card:focus-within{box-shadow:0 0 0 2px var(–accent);}
+.drawer-card-header{display:flex;align-items:center;padding:10px 14px;gap:8px;border-bottom:1px solid var(–border);background:rgba(200,138,46,0.04);}
+.drawer-card-header .dnum{font-size:11px;font-weight:700;color:var(–accent-dark);min-width:24px;}
+.drawer-card-header .dtitle{flex:1;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.drawer-card-actions{display:flex;gap:2px;flex-shrink:0;}
+.drawer-card-body{padding:12px 14px;display:grid;gap:10px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.field{display:flex;flex-direction:column;gap:3px;}
+.field label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(–text-muted);}
+.field input,.field select{font-family:‘JetBrains Mono’,monospace;font-size:14px;border:1.5px solid var(–border);border-radius:5px;padding:8px 10px;background:#fff;width:100%;-webkit-appearance:none;}
+.field select{font-family:‘DM Sans’,sans-serif;cursor:pointer;background:url(“data:image/svg+xml,%3Csvg xmlns=‘http://www.w3.org/2000/svg’ width=‘12’ height=‘12’ viewBox=‘0 0 12 12’%3E%3Cpath d=‘M3 5l3 3 3-3’ fill=‘none’ stroke=’%238a8d94’ stroke-width=‘1.5’/%3E%3C/svg%3E”) no-repeat right 10px center #fff;padding-right:28px;}
+.field input:focus,.field select:focus{outline:none;border-color:var(–accent);}
+.drawer-results{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:10px 14px;border-top:1px solid var(–border);background:rgba(200,138,46,0.03);}
+.res{display:flex;flex-direction:column;gap:1px;}
+.res-label{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(–text-muted);}
+.res-val{font-family:‘JetBrains Mono’,monospace;font-size:12px;font-weight:600;color:var(–accent-dark);}
+
+/* Desktop table */
+.drawer-table-wrap{display:none;}
+.drawer-table{width:100%;border-collapse:collapse;}
+.drawer-table th{text-align:left;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(–text-muted);padding:8px 8px;border-bottom:2px solid var(–border);}
+.drawer-table td{padding:6px 8px;border-bottom:1px solid var(–border);vertical-align:middle;font-size:13px;}
+.drawer-table tr:hover td{background:rgba(200,138,46,0.04);}
+.drawer-table input[type=“text”]{font-family:‘JetBrains Mono’,monospace;font-size:13px;border:1.5px solid var(–border);border-radius:4px;padding:5px 8px;width:100%;background:#fff;}
+.drawer-table input:focus{outline:none;border-color:var(–accent);}
+.drawer-table select{font-family:‘DM Sans’,sans-serif;font-size:13px;border:1.5px solid var(–border);border-radius:4px;padding:5px 8px;background:#fff;cursor:pointer;}
+.drawer-table select:focus{outline:none;border-color:var(–accent);}
+.drawer-table .calc{font-family:‘JetBrains Mono’,monospace;font-size:12px;color:var(–accent-dark);font-weight:600;white-space:nowrap;}
+.qty-input{width:50px!important;text-align:center;}
+.act-cell{white-space:nowrap;}
+
+/* CARDS */
+.card{background:var(–bg-card);border-radius:8px;border:1.5px solid var(–border);margin-bottom:14px;overflow:hidden;}
+.card-header{padding:12px 16px;border-bottom:1.5px solid var(–border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.card-header h2{font-size:14px;font-weight:700;}
+.card-body{padding:14px 16px;}
+.empty-state{text-align:center;padding:50px 20px;color:var(–text-muted);}
+.empty-state h3{font-size:17px;margin-bottom:6px;color:var(–text-dark);}
+.empty-state p{font-size:13px;max-width:380px;margin:0 auto;line-height:1.5;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:center;justify-content:center;z-index:1000;padding:16px;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(–bg-card);border-radius:10px;width:420px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.modal-header{padding:14px 18px;border-bottom:1.5px solid var(–border);font-size:15px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}
+.modal-body{padding:18px;}
+.modal-body label{display:block;font-size:11px;font-weight:600;margin-bottom:4px;color:var(–text-muted);text-transform:uppercase;letter-spacing:.3px;}
+.modal-body input,.modal-body select{width:100%;font-family:‘DM Sans’,sans-serif;font-size:14px;border:1.5px solid var(–border);border-radius:5px;padding:9px 12px;margin-bottom:12px;}
+.modal-body input:focus,.modal-body select:focus{outline:none;border-color:var(–accent);}
+.modal-body .hint{font-size:11px;color:var(–text-muted);margin:-8px 0 12px;line-height:1.4;}
+.modal-footer{padding:12px 18px;border-top:1.5px solid var(–border);display:flex;justify-content:flex-end;gap:8px;}
+
+/* OPTIMIZATION VIZ */
+.board-row{display:flex;height:26px;border:1.5px solid var(–bg-dark);border-radius:3px;margin:4px 0;overflow:hidden;font-size:10px;}
+.board-piece{background:rgba(200,138,46,0.25);border-right:1.5px solid var(–bg-dark);display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;padding:0 3px;}
+.board-drop{flex:1;display:flex;align-items:center;justify-content:center;color:var(–text-muted);font-style:italic;}
+.bottom-chip{font-size:11px;background:rgba(200,138,46,0.1);border:1px solid var(–border);border-radius:4px;padding:4px 8px;display:inline-block;margin:2px;}
+.summary-box{margin-top:14px;padding:10px 14px;border:2px solid var(–accent);border-radius:6px;font-size:13px;font-weight:600;line-height:1.6;}
+
+/* TAG */
+.tag{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px;}
+.tag-amber{background:rgba(200,138,46,0.15);color:var(–accent-dark);}
+input[type=“file”]{display:none;}
+.topbar-group{display:flex;gap:6px;align-items:center;}
+.topbar-sep{width:1px;height:24px;background:var(–border);margin:0 4px;}
+
+/* LOGIN SCREEN */
+.login-screen{display:flex;align-items:center;justify-content:center;height:100vh;height:100dvh;padding:20px;background:var(–bg-dark);}
+.login-card{background:var(–bg-card);border-radius:12px;padding:32px;width:440px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.4);}
+.login-card h1{font-size:20px;font-weight:700;margin-bottom:4px;color:var(–accent-dark);}
+.login-card .subtitle{font-size:12px;color:var(–text-muted);margin-bottom:24px;}
+.login-card label{display:block;font-size:11px;font-weight:600;margin-bottom:4px;color:var(–text-muted);text-transform:uppercase;letter-spacing:.3px;}
+.login-card input{width:100%;font-family:‘JetBrains Mono’,monospace;font-size:13px;border:1.5px solid var(–border);border-radius:5px;padding:10px 12px;margin-bottom:16px;}
+.login-card input:focus{outline:none;border-color:var(–accent);}
+.login-card .hint{font-size:11px;color:var(–text-muted);margin:-12px 0 16px;line-height:1.4;}
+.login-card .error{font-size:12px;color:var(–danger);margin-bottom:12px;display:none;}
+.login-card .btn{width:100%;justify-content:center;padding:10px;font-size:14px;}
+
+/* LOADING OVERLAY */
+.loading-overlay{position:fixed;inset:0;background:rgba(26,29,35,0.7);display:none;align-items:center;justify-content:center;z-index:2000;color:var(–text-light);font-size:14px;font-weight:600;flex-direction:column;gap:12px;}
+.loading-overlay.show{display:flex;}
+.spinner{width:28px;height:28px;border:3px solid rgba(255,255,255,0.2);border-top-color:var(–accent-light);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== MOBILE ===== */
+@media(max-width:768px){
+.sidebar{position:fixed;top:0;left:0;bottom:0;transform:translateX(-100%);}
+.sidebar.open{transform:translateX(0);}
+.sidebar-overlay.open{display:block;}
+.sidebar-close{display:block;}
+.hamburger{display:block;}
+.topbar{padding:8px 12px;gap:6px;}
+.topbar .btn{font-size:11px;padding:6px 10px;}
+.topbar-sep{display:none;}
+.workspace{padding:12px;}
+.drawer-table-wrap{display:none!important;}
+.drawer-cards-wrap{display:block!important;}
+.card-header{padding:10px 14px;}
+.card-header h2{font-size:13px;}
+.card-body{padding:12px 14px;}
+}
+@media(min-width:769px){
+.drawer-table-wrap{display:block;}
+.drawer-cards-wrap{display:none;}
+}
+@media(max-width:480px){
+.topbar{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.topbar::-webkit-scrollbar{display:none;}
+.drawer-results{grid-template-columns:1fr 1fr;}
+.field-row{grid-template-columns:1fr!important;}
+.login-card{padding:24px 20px;}
+}
+
+/* PRINT */
+@media print{
+body{background:#fff!important;overflow:visible!important;}
+.app{display:block!important;height:auto!important;}
+.sidebar,.sidebar-overlay,.topbar,.no-print,.hamburger,.loading-overlay{display:none!important;}
+.workspace{padding:0!important;overflow:visible!important;}
+.main{overflow:visible!important;}
+.print-content{display:block!important;}
+.screen-content{display:none!important;}
+.print-content h1{font-size:20px;margin-bottom:4px;}
+.print-content h2{font-size:16px;margin:16px 0 6px;border-bottom:2px solid #333;padding-bottom:3px;}
+.print-content h3{font-size:13px;margin:12px 0 4px;color:#555;}
+.print-content table{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:11px;}
+.print-content th,.print-content td{border:1px solid #999;padding:4px 8px;text-align:left;}
+.print-content th{background:#e8e8e8;font-weight:700;font-size:10px;text-transform:uppercase;}
+@page{margin:0.5in;size:letter;}
+}
+.print-content{display:none;}
+
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:3px;}
+.sidebar ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.12);}
+</style>
+
+</head>
+<body>
+
+<!-- LOGIN -->
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>&#9638; Drawer Cut List Calculator</h1>
+    <p class="subtitle">Connect to your GitHub repository to sync job data.</p>
+    <label>GitHub Personal Access Token</label>
+    <input type="password" id="loginToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+    <p class="hint">Fine-grained token with Contents read/write on your repo.</p>
+    <label>Repository Owner</label>
+    <input type="text" id="loginOwner" placeholder="your-username">
+    <label>Repository Name</label>
+    <input type="text" id="loginRepo" placeholder="drawer-data">
+    <label>Data Folder (optional)</label>
+    <input type="text" id="loginFolder" placeholder="jobs" value="jobs">
+    <p class="hint">Root folder in the repo where job data is stored.</p>
+    <p class="error" id="loginError"></p>
+    <button class="btn btn-accent" onclick="doLogin()" id="loginBtn">Connect &amp; Load</button>
+    <div style="margin-top:16px;text-align:center">
+      <button class="btn btn-outline btn-sm" onclick="startOffline()" style="width:auto;font-size:11px">Use Offline (no sync)</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOADING -->
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <span id="loadingText">Loading...</span>
+</div>
+
+<!-- APP -->
+
+<div class="app" id="app">
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-header-text">
+        <h1>&#9638; Drawer Calc</h1>
+        <p id="repoLabel">Offline Mode</p>
+      </div>
+      <button class="sidebar-close" onclick="closeSidebar()">&times;</button>
+    </div>
+    <div class="sidebar-actions">
+      <button class="btn btn-sidebar" onclick="addJob()">+ Job</button>
+      <button class="btn btn-sidebar" onclick="addListToJob()">+ List</button>
+    </div>
+    <div class="sidebar-tree" id="sidebarTree"></div>
+    <div class="sidebar-bottom">
+      <button class="btn btn-sidebar" onclick="showSettings()" style="width:100%">&#9881; Settings</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar no-print">
+      <button class="hamburger" onclick="openSidebar()" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+      <span class="sync-badge sync-saved" id="syncBadge" style="display:none"><span class="sync-dot"></span><span id="syncText">Saved</span></span>
+      <div class="topbar-sep"></div>
+      <div class="topbar-group" id="offlineTools" style="display:none">
+        <button class="btn btn-accent btn-sm" onclick="exportData()">&#8681; Export</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('importInput').click()">&#8679; Import</button>
+        <input type="file" id="importInput" accept=".json" onchange="importData(event)">
+      </div>
+      <div class="topbar-group">
+        <button class="btn btn-outline btn-sm" onclick="refreshFromGit()" id="btnRefresh" style="display:none">&#8635; Refresh</button>
+      </div>
+      <div style="flex:1;min-width:8px"></div>
+      <div class="topbar-group">
+        <button class="btn btn-dark btn-sm" onclick="printCurrentList()" id="btnPrintList" style="display:none">&#9113; List</button>
+        <button class="btn btn-dark btn-sm" onclick="printJob()" id="btnPrintJob" style="display:none">&#9113; Job</button>
+      </div>
+    </div>
+
+```
+<div class="workspace screen-content" id="workspace">
+  <div class="empty-state" id="emptyState">
+    <h3>No list selected</h3>
+    <p>Tap ☰ to create a job, add lists under it, then select a list to start adding drawers.</p>
+  </div>
+  <div id="listView" style="display:none"></div>
+</div>
+<div class="workspace print-content" id="printArea"></div>
+```
+
+  </div>
+</div>
+
+<!-- MODAL -->
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <span id="modalTitle">Title</span>
+      <button class="btn btn-ghost" onclick="closeModal()" style="font-size:18px">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer" id="modalFooter"></div>
+  </div>
+</div>
+
+<script>
+// ===================================================================
+// FRACTION MATH
+// ===================================================================
+function gcd(a,b){a=Math.abs(a);b=Math.abs(b);while(b){let t=b;b=a%b;a=t;}return a;}
+function parseFraction(str){
+  if(typeof str==='number') return str;
+  str=String(str).trim(); if(!str) return NaN;
+  if(/^-?\d+(\.\d+)?$/.test(str)) return parseFloat(str);
+  const m=str.match(/^(-?\d+)?\s*(?:(\d+)\/(\d+))?$/);
+  if(!m) return NaN;
+  let whole=m[1]?parseInt(m[1]):0,num=m[2]?parseInt(m[2]):0,den=m[3]?parseInt(m[3]):1;
+  if(den===0) return NaN;
+  return whole+num/den;
+}
+function toFraction(dec){
+  if(isNaN(dec)) return '?';
+  const neg=dec<0;if(neg) dec=-dec;
+  const whole=Math.floor(dec);
+  let rem=dec-whole,num32=Math.round(rem*32);
+  if(num32===32) return (neg?'-':'')+(whole+1);
+  if(num32===0) return (neg?'-':'')+String(whole);
+  let num=num32,den=32,g=gcd(num,den);
+  num/=g;den/=g;
+  return (neg?'-':'')+(whole?whole+' ':'')+num+'/'+den;
+}
+function dd(dec){return isNaN(dec)?'—':toFraction(dec);}
+
+// ===================================================================
+// DATA MODEL
+// ===================================================================
+let data={jobs:[]};
+let selectedJobId=null, selectedListId=null, nextId=1;
+function uid(){return 'd'+(nextId++)+(Date.now()%10000);}
+function getJob(id){return data.jobs.find(j=>j.id===id);}
+function getList(jid,lid){const j=getJob(jid);return j?j.lists.find(l=>l.id===lid):null;}
+
+// ===================================================================
+// CALCULATIONS
+// ===================================================================
+function calcDrawer(d){
+  const ow=parseFraction(d.openWidth),od=parseFraction(d.openDepth);
+  return{cutW:ow-7/16,cutD:od-1/4,botW:(ow-7/16)-29/32,botD:(od-1/4)-19/32,height:d.height,qty:d.qty||1};
+}
+
+// ===================================================================
+// BIN PACKING
+// ===================================================================
+function optimizeCuts(pieces,boardLen){
+  let expanded=[];
+  pieces.forEach(p=>{for(let i=0;i<p.count;i++) expanded.push({len:p.len,label:p.label});});
+  expanded.sort((a,b)=>b.len-a.len);
+  let boards=[];
+  expanded.forEach(p=>{
+    let placed=false;
+    for(let b of boards){if(b.remaining>=p.len){b.pieces.push(p);b.remaining-=p.len;placed=true;break;}}
+    if(!placed) boards.push({pieces:[p],remaining:boardLen-p.len});
+  });
+  return boards;
+}
+
+// ===================================================================
+// GITHUB API LAYER
+// ===================================================================
+let ghConfig=null; // {token, owner, repo, folder}
+let ghSHAs={};     // path -> sha (for updates/deletes)
+
+function ghHeaders(){
+  return {'Authorization':'Bearer '+ghConfig.token,'Accept':'application/vnd.github+json','Content-Type':'application/json','X-GitHub-Api-Version':'2022-11-28'};
+}
+function ghUrl(path){
+  return `https://api.github.com/repos/${ghConfig.owner}/${ghConfig.repo}/contents/${path}`;
+}
+function slugify(str){return str.replace(/[^a-zA-Z0-9_ -]/g,'').trim().replace(/\s+/g,'-').toLowerCase();}
+
+// Get contents (file or directory)
+async function ghGet(path){
+  const r=await fetch(ghUrl(path),{headers:ghHeaders()});
+  if(r.status===404) return null;
+  if(!r.ok) throw new Error(`GitHub GET ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+// Create or update a file
+async function ghPut(path,content,message){
+  const body={message,content:btoa(unescape(encodeURIComponent(content)))};
+  if(ghSHAs[path]) body.sha=ghSHAs[path];
+  const r=await fetch(ghUrl(path),{method:'PUT',headers:ghHeaders(),body:JSON.stringify(body)});
+  if(!r.ok) throw new Error(`GitHub PUT ${r.status}: ${await r.text()}`);
+  const result=await r.json();
+  ghSHAs[path]=result.content.sha;
+  return result;
+}
+
+// Delete a file
+async function ghDelete(path,message){
+  if(!ghSHAs[path]){
+    const file=await ghGet(path);
+    if(file) ghSHAs[path]=file.sha;
+    else return;
+  }
+  const body={message,sha:ghSHAs[path]};
+  const r=await fetch(ghUrl(path),{method:'DELETE',headers:ghHeaders(),body:JSON.stringify(body)});
+  if(!r.ok&&r.status!==404) throw new Error(`GitHub DELETE ${r.status}: ${await r.text()}`);
+  delete ghSHAs[path];
+}
+
+// Build file path for a list
+function listPath(jobName,listName){
+  return `${ghConfig.folder}/${slugify(jobName)}/${slugify(listName)}.json`;
+}
+
+// Load everything from the repo
+async function ghLoadAll(){
+  data={jobs:[]};
+  ghSHAs={};
+  const root=await ghGet(ghConfig.folder);
+  if(!root||!Array.isArray(root)) return; // empty repo
+  for(const dir of root){
+    if(dir.type!=='dir') continue;
+    const jobName=dir.name;
+    const job={id:uid(),name:jobName,lists:[],_open:false,_slug:dir.name};
+    const files=await ghGet(dir.path);
+    if(files&&Array.isArray(files)){
+      for(const f of files){
+        if(!f.name.endsWith('.json')) continue;
+        ghSHAs[f.path]=f.sha;
+        const fileData=await ghGet(f.path);
+        if(fileData&&fileData.content){
+          try{
+            const decoded=decodeURIComponent(escape(atob(fileData.content.replace(/\n/g,''))));
+            const listData=JSON.parse(decoded);
+            listData.id=uid();
+            listData._path=f.path;
+            job.lists.push(listData);
+          }catch(e){console.warn('Failed to parse',f.path,e);}
+        }
+      }
+    }
+    data.jobs.push(job);
+  }
+}
+
+// Save a single list to the repo
+async function ghSaveList(jobName,list){
+  if(!ghConfig) return;
+  const path=listPath(jobName,list.name);
+  const clean={name:list.name,drawers:list.drawers};
+  const old=list._path;
+  // If name changed (different path), delete old file
+  if(old&&old!==path){
+    try{await ghDelete(old,'Rename: '+old);}catch(e){console.warn(e);}
+  }
+  list._path=path;
+  await ghPut(path,JSON.stringify(clean,null,2),'Update '+path);
+}
+
+// Delete a list from the repo
+async function ghDeleteList(list){
+  if(!ghConfig||!list._path) return;
+  await ghDelete(list._path,'Delete '+list._path);
+}
+
+// Delete an entire job folder
+async function ghDeleteJob(job){
+  if(!ghConfig) return;
+  for(const l of job.lists){
+    if(l._path){try{await ghDelete(l._path,'Delete '+l._path);}catch(e){}}
+  }
+}
+
+// ===================================================================
+// SYNC STATUS
+// ===================================================================
+function setSyncStatus(state,text){
+  const badge=document.getElementById('syncBadge');
+  const label=document.getElementById('syncText');
+  if(!ghConfig){badge.style.display='none';return;}
+  badge.style.display='inline-flex';
+  badge.className='sync-badge sync-'+state;
+  label.textContent=text||state;
+}
+
+let saveTimer=null;
+function debouncedSave(){
+  if(!ghConfig) return;
+  setSyncStatus('saving','Saving...');
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async()=>{
+    try{
+      const job=getJob(selectedJobId);
+      const list=getList(selectedJobId,selectedListId);
+      if(job&&list){
+        await ghSaveList(job.name,list);
+      }
+      setSyncStatus('saved','Saved');
+    }catch(e){
+      console.error('Save error:',e);
+      setSyncStatus('error','Error');
+    }
+  },1500);
+}
+
+// ===================================================================
+// LOGIN / SETTINGS
+// ===================================================================
+function loadConfig(){
+  try{
+    const c=localStorage.getItem('drawerCalcGH');
+    if(c) return JSON.parse(c);
+  }catch(e){}
+  return null;
+}
+function saveConfig(){
+  if(ghConfig) localStorage.setItem('drawerCalcGH',JSON.stringify(ghConfig));
+}
+
+async function doLogin(){
+  const token=document.getElementById('loginToken').value.trim();
+  const owner=document.getElementById('loginOwner').value.trim();
+  const repo=document.getElementById('loginRepo').value.trim();
+  const folder=document.getElementById('loginFolder').value.trim()||'jobs';
+  const errEl=document.getElementById('loginError');
+  errEl.style.display='none';
+  if(!token||!owner||!repo){errEl.textContent='All fields required.';errEl.style.display='block';return;}
+
+  document.getElementById('loginBtn').disabled=true;
+  document.getElementById('loginBtn').textContent='Connecting...';
+
+  ghConfig={token,owner,repo,folder};
+  try{
+    // Test connection
+    const r=await fetch(`https://api.github.com/repos/${owner}/${repo}`,{headers:ghHeaders()});
+    if(!r.ok) throw new Error('Cannot access repo ('+r.status+')');
+    saveConfig();
+    await initApp();
+  }catch(e){
+    ghConfig=null;
+    errEl.textContent=e.message;errEl.style.display='block';
+    document.getElementById('loginBtn').disabled=false;
+    document.getElementById('loginBtn').textContent='Connect & Load';
+  }
+}
+
+function startOffline(){
+  ghConfig=null;
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').classList.add('ready');
+  document.getElementById('offlineTools').style.display='flex';
+  document.getElementById('repoLabel').textContent='Offline Mode';
+  // Load from localStorage fallback
+  try{
+    const d=localStorage.getItem('drawerCalcOffline');
+    if(d){data=JSON.parse(d);data.jobs.forEach(j=>{if(!j.id)j.id=uid();j._open=true;j.lists.forEach(l=>{if(!l.id)l.id=uid();});});}
+  }catch(e){}
+  renderSidebar();renderWorkspace();
+}
+
+async function initApp(){
+  document.getElementById('loginScreen').style.display='none';
+  showLoading('Loading jobs from GitHub...');
+  try{
+    await ghLoadAll();
+  }catch(e){
+    console.error(e);
+    alert('Error loading from GitHub: '+e.message);
+  }
+  hideLoading();
+  document.getElementById('app').classList.add('ready');
+  document.getElementById('repoLabel').textContent=ghConfig.owner+'/'+ghConfig.repo;
+  document.getElementById('btnRefresh').style.display='';
+  setSyncStatus('saved','Synced');
+  renderSidebar();renderWorkspace();
+}
+
+function showSettings(){
+  const isOnline=!!ghConfig;
+  let body=`<label>Status</label><p style="margin-bottom:12px;font-weight:600;color:${isOnline?'var(--success)':'var(--text-muted)'}">${isOnline?'Connected to '+ghConfig.owner+'/'+ghConfig.repo:'Offline Mode'}</p>`;
+  if(isOnline){
+    body+=`<p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Data folder: <strong>${ghConfig.folder}/</strong></p>`;
+  }
+  const buttons=[
+    {label:'Close',cls:'btn-outline',action(){closeModal();}},
+  ];
+  if(isOnline){
+    buttons.unshift({label:'Disconnect',cls:'btn-danger',action(){
+      if(!confirm('Disconnect from GitHub? Local data will be cleared.')) return;
+      localStorage.removeItem('drawerCalcGH');
+      location.reload();
+    }});
+  }
+  openModal('Settings',body,buttons);
+}
+
+// ===================================================================
+// LOADING OVERLAY
+// ===================================================================
+function showLoading(msg){document.getElementById('loadingText').textContent=msg||'Loading...';document.getElementById('loadingOverlay').classList.add('show');}
+function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
+
+// ===================================================================
+// SIDEBAR
+// ===================================================================
+function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
+function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
+
+function renderSidebar(){
+  const tree=document.getElementById('sidebarTree');
+  let h='';
+  data.jobs.forEach(j=>{
+    const isOpen=j._open!==false,isActive=j.id===selectedJobId&&!selectedListId;
+    h+=`<div class="job-item">
+      <div class="job-header ${isActive?'active':''}" onclick="toggleJob('${j.id}')">
+        <span class="arrow ${isOpen?'open':''}">&#9654;</span>
+        <span class="name">${esc(j.name)}</span>
+        <span class="tag tag-amber">${j.lists.length}</span>
+        <span class="job-actions" onclick="event.stopPropagation()">
+          <button class="ibtn" onclick="renameJob('${j.id}')" title="Rename">&#9998;</button>
+          <button class="ibtn" onclick="deleteJob('${j.id}')" title="Delete">&#10005;</button>
+        </span>
+      </div>`;
+    if(isOpen){
+      h+='<div class="job-lists">';
+      j.lists.forEach(l=>{
+        const la=selectedJobId===j.id&&selectedListId===l.id;
+        h+=`<div class="list-item ${la?'active':''}" onclick="selectList('${j.id}','${l.id}')">
+          <span class="dot"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.name)}</span>
+          <span class="list-actions" onclick="event.stopPropagation()">
+            <button class="ibtn" onclick="renameList('${j.id}','${l.id}')" title="Rename">&#9998;</button>
+            <button class="ibtn" onclick="duplicateList('${j.id}','${l.id}')" title="Copy">&#10697;</button>
+            <button class="ibtn" onclick="moveList('${j.id}','${l.id}')" title="Move">&#8644;</button>
+            <button class="ibtn" onclick="deleteList('${j.id}','${l.id}')" title="Delete">&#10005;</button>
+          </span>
+        </div>`;
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+  tree.innerHTML=h;
+  document.getElementById('btnPrintList').style.display=selectedListId?'':'none';
+  document.getElementById('btnPrintJob').style.display=selectedJobId?'':'none';
+  offlineSave();
+}
+
+// ===================================================================
+// WORKSPACE
+// ===================================================================
+function renderWorkspace(){
+  const ws=document.getElementById('listView'),empty=document.getElementById('emptyState');
+  if(!selectedJobId||!selectedListId){ws.style.display='none';empty.style.display='';offlineSave();return;}
+  const job=getJob(selectedJobId),list=getList(selectedJobId,selectedListId);
+  if(!job||!list){ws.style.display='none';empty.style.display='';offlineSave();return;}
+  empty.style.display='none';ws.style.display='';
+
+  let h=`<div class="card">
+    <div class="card-header">
+      <h2>${esc(job.name)} &#8250; ${esc(list.name)}</h2>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-accent btn-sm" onclick="addDrawer()">+ Add Drawer</button>
+        <button class="btn btn-outline btn-sm" onclick="clearAllDrawers()">Clear All</button>
+      </div>
+    </div>`;
+
+  // DESKTOP TABLE
+  h+=`<div class="drawer-table-wrap"><div style="overflow-x:auto"><table class="drawer-table">
+    <thead><tr>
+      <th>#</th><th>Opening W</th><th>Opening D</th><th>Height</th><th>Qty</th>
+      <th>Cut F/B</th><th>Cut Side</th><th>Bottom</th><th style="min-width:120px">Actions</th>
+    </tr></thead><tbody>`;
+  list.drawers.forEach((d,i)=>{
+    const c=calcDrawer(d);
+    h+=`<tr>
+      <td style="color:var(--text-muted);font-size:11px;font-weight:600">${i+1}</td>
+      <td><input type="text" class="mono" value="${esc(d.openWidth)}" onchange="updateDrawer(${i},'openWidth',this.value)" placeholder="30 9/16"></td>
+      <td><input type="text" class="mono" value="${esc(d.openDepth)}" onchange="updateDrawer(${i},'openDepth',this.value)" placeholder="21"></td>
+      <td><select onchange="updateDrawer(${i},'height',+this.value)">
+        ${[4,6,8,10].map(v=>`<option value="${v}"${d.height===v?' selected':''}>${v}"</option>`).join('')}
+      </select></td>
+      <td><input type="text" class="mono qty-input" value="${d.qty}" onchange="updateDrawer(${i},'qty',Math.max(1,parseInt(this.value)||1))"></td>
+      <td class="calc">${dd(c.cutW)} &times; ${d.height}"</td>
+      <td class="calc">${dd(c.cutD)} &times; ${d.height}"</td>
+      <td class="calc">${dd(c.botW)} &times; ${dd(c.botD)}</td>
+      <td class="act-cell">
+        <button class="btn-icon" onclick="moveDrawer(${i},-1)" title="Up" ${i===0?'disabled':''}>&#9650;</button>
+        <button class="btn-icon" onclick="moveDrawer(${i},1)" title="Down" ${i===list.drawers.length-1?'disabled':''}>&#9660;</button>
+        <button class="btn-icon" onclick="duplicateDrawer(${i})" title="Duplicate">&#10697;</button>
+        <button class="btn-icon" onclick="editDrawerModal(${i})" title="Edit">&#9998;</button>
+        <button class="btn-icon" onclick="removeDrawer(${i})" title="Delete" style="color:var(--danger)">&#10005;</button>
+      </td>
+    </tr>`;
+  });
+  if(!list.drawers.length) h+=`<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text-muted)">No drawers yet</td></tr>`;
+  h+='</tbody></table></div></div>';
+
+  // MOBILE CARDS
+  h+='<div class="drawer-cards-wrap" style="padding:12px">';
+  list.drawers.forEach((d,i)=>{
+    const c=calcDrawer(d);
+    h+=`<div class="drawer-card">
+      <div class="drawer-card-header">
+        <span class="dnum">#${i+1}</span>
+        <span class="dtitle">${d.openWidth||'—'} &times; ${d.openDepth||'—'} @ ${d.height}" (&times;${d.qty})</span>
+        <div class="drawer-card-actions">
+          <button class="btn-icon" onclick="moveDrawer(${i},-1)" ${i===0?'disabled':''}>&#9650;</button>
+          <button class="btn-icon" onclick="moveDrawer(${i},1)" ${i===list.drawers.length-1?'disabled':''}>&#9660;</button>
+          <button class="btn-icon" onclick="duplicateDrawer(${i})">&#10697;</button>
+          <button class="btn-icon" onclick="removeDrawer(${i})" style="color:var(--danger)">&#10005;</button>
+        </div>
+      </div>
+      <div class="drawer-card-body">
+        <div class="field-row">
+          <div class="field"><label>Opening Width</label><input type="text" value="${esc(d.openWidth)}" onchange="updateDrawer(${i},'openWidth',this.value)" placeholder="30 9/16"></div>
+          <div class="field"><label>Opening Depth</label><input type="text" value="${esc(d.openDepth)}" onchange="updateDrawer(${i},'openDepth',this.value)" placeholder="21"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Height</label><select onchange="updateDrawer(${i},'height',+this.value)">
+            ${[4,6,8,10].map(v=>`<option value="${v}"${d.height===v?' selected':''}>${v}"</option>`).join('')}
+          </select></div>
+          <div class="field"><label>Quantity</label><input type="text" value="${d.qty}" onchange="updateDrawer(${i},'qty',Math.max(1,parseInt(this.value)||1))" inputmode="numeric"></div>
+        </div>
+      </div>
+      <div class="drawer-results">
+        <div class="res"><span class="res-label">F/B Cut</span><span class="res-val">${dd(c.cutW)} &times; ${d.height}"</span></div>
+        <div class="res"><span class="res-label">Side Cut</span><span class="res-val">${dd(c.cutD)} &times; ${d.height}"</span></div>
+        <div class="res"><span class="res-label">Bottom</span><span class="res-val">${dd(c.botW)} &times; ${dd(c.botD)}</span></div>
+      </div>
+    </div>`;
+  });
+  if(!list.drawers.length) h+='<div style="text-align:center;padding:30px;color:var(--text-muted)">No drawers yet. Tap "+ Add Drawer".</div>';
+  h+='</div></div>';
+
+  if(list.drawers.length>0) h+=renderCutSummary(list);
+  ws.innerHTML=h;
+  offlineSave();
+  debouncedSave();
+}
+
+function renderCutSummary(list){
+  const groups={4:[],6:[],8:[],10:[]};
+  const bottoms=[];
+  list.drawers.forEach(d=>{
+    const c=calcDrawer(d);
+    if(isNaN(c.cutW)||isNaN(c.cutD)) return;
+    if(!groups[d.height]) groups[d.height]=[];
+    groups[d.height].push({len:c.cutW,label:`F/B ${dd(c.cutW)}`,count:2*d.qty});
+    groups[d.height].push({len:c.cutD,label:`S ${dd(c.cutD)}`,count:2*d.qty});
+    for(let q=0;q<d.qty;q++) bottoms.push({w:c.botW,d:c.botD,label:`${dd(c.botW)} × ${dd(c.botD)}`});
+  });
+  let h='<div class="card"><div class="card-header"><h2>Cut Optimization (96" Boards)</h2></div><div class="card-body">';
+  let totalBoards=0,totalWaste=0;
+  for(const ht of [4,6,8,10]){
+    const pcs=groups[ht];
+    if(!pcs||!pcs.length||pcs.every(p=>p.count===0)) continue;
+    const boards=optimizeCuts(pcs,96);
+    totalBoards+=boards.length;
+    h+=`<div style="font-weight:700;font-size:13px;margin:14px 0 6px">${ht}" Height — ${boards.length} board${boards.length!==1?'s':''}</div>`;
+    boards.forEach(b=>{
+      totalWaste+=b.remaining;
+      h+=`<div class="board-row mono">`;
+      b.pieces.forEach(p=>{const pct=(p.len/96*100).toFixed(1);h+=`<div class="board-piece" style="width:${pct}%" title="${p.label}">${p.label}</div>`;});
+      h+=`<div class="board-drop">${dd(b.remaining)}" drop</div></div>`;
+    });
+  }
+  if(bottoms.length){
+    h+=`<div style="font-weight:700;font-size:13px;margin:16px 0 6px">Bottoms — ${bottoms.length} piece${bottoms.length!==1?'s':''}</div>`;
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    bottoms.forEach(b=>{h+=`<span class="bottom-chip mono">${b.label}</span>`;});
+    h+='</div>';
+  }
+  h+=`<div class="summary-box"><strong>Total Boards:</strong> ${totalBoards}`;
+  for(const ht of [4,6,8,10]){
+    const pcs=groups[ht];
+    if(!pcs||!pcs.length||pcs.every(p=>p.count===0)) continue;
+    h+=`<br>${ht}" stock: ${optimizeCuts(pcs,96).length} board${optimizeCuts(pcs,96).length!==1?'s':''}`;
+  }
+  h+=`<br><strong>Bottoms:</strong> ${bottoms.length} piece${bottoms.length!==1?'s':''}
+    <br><strong>Total drop waste:</strong> ${dd(totalWaste)}"</div>`;
+  h+='</div></div>';
+  return h;
+}
+
+// ===================================================================
+// JOB ACTIONS
+// ===================================================================
+function addJob(){
+  openModal('New Job',`<label>Job Name</label><input id="mInput" placeholder="e.g. Rocky River"><p class="hint">This becomes a folder in your repo.</p>`,
+    [{label:'Create',cls:'btn-accent',action(){
+      const n=document.getElementById('mInput').value.trim();if(!n)return;
+      data.jobs.push({id:uid(),name:n,lists:[],_open:true});
+      closeModal();renderSidebar();
+    }}]);
+  focusModal();
+}
+
+function renameJob(jid){
+  const j=getJob(jid);
+  openModal('Rename Job',`<label>Job Name</label><input id="mInput" value="${esc(j.name)}"><p class="hint">Renaming will save lists under the new folder name.</p>`,
+    [{label:'Save',cls:'btn-accent',action:async()=>{
+      const newName=document.getElementById('mInput').value.trim();
+      if(!newName||newName===j.name){closeModal();return;}
+      const oldName=j.name;
+      closeModal();
+      if(ghConfig){
+        showLoading('Renaming job...');
+        try{
+          // Save all lists under new name, delete old paths
+          for(const l of j.lists){
+            const oldPath=l._path;
+            j.name=newName;
+            await ghSaveList(newName,l);
+            if(oldPath&&oldPath!==l._path){
+              try{await ghDelete(oldPath,'Rename job folder');}catch(e){}
+            }
+          }
+          j.name=newName;
+          setSyncStatus('saved','Saved');
+        }catch(e){
+          console.error(e);setSyncStatus('error','Error');
+          j.name=oldName; // revert on failure
+        }
+        hideLoading();
+      } else {
+        j.name=newName;
+      }
+      renderSidebar();renderWorkspace();
+    }}]);
+  focusModal(true);
+}
+
+function deleteJob(jid){
+  const j=getJob(jid);
+  openModal('Delete Job',`<p style="margin-bottom:8px">Delete <strong>${esc(j.name)}</strong> and all its lists?</p><p style="font-size:12px;color:var(--text-muted)">This will also remove files from the repository.</p>`,
+    [{label:'Cancel',cls:'btn-outline',action(){closeModal();}},{label:'Delete',cls:'btn-danger',action:async()=>{
+      closeModal();
+      if(ghConfig){
+        showLoading('Deleting job...');
+        try{await ghDeleteJob(j);setSyncStatus('saved','Saved');}catch(e){console.error(e);setSyncStatus('error','Error');}
+        hideLoading();
+      }
+      data.jobs=data.jobs.filter(x=>x.id!==jid);
+      if(selectedJobId===jid){selectedJobId=null;selectedListId=null;}
+      renderSidebar();renderWorkspace();
+    }}]);
+}
+
+function toggleJob(jid){const j=getJob(jid);j._open=j._open===false;selectedJobId=jid;renderSidebar();}
+
+// ===================================================================
+// LIST ACTIONS
+// ===================================================================
+function addListToJob(){
+  if(!data.jobs.length){addJob();return;}
+  const opts=data.jobs.map(j=>`<option value="${j.id}"${j.id===selectedJobId?' selected':''}>${esc(j.name)}</option>`).join('');
+  openModal('New List',`<label>Job</label><select id="mJob">${opts}</select><label>List Name</label><input id="mInput" placeholder="e.g. Reception Desk"><p class="hint">Creates a JSON file in the job folder.</p>`,
+    [{label:'Create',cls:'btn-accent',action:async()=>{
+      const jid=document.getElementById('mJob').value,n=document.getElementById('mInput').value.trim();
+      if(!n||!jid)return;
+      const j=getJob(jid);
+      const newList={id:uid(),name:n,drawers:[]};
+      j.lists.push(newList);j._open=true;
+      selectedJobId=jid;selectedListId=newList.id;
+      closeModal();closeSidebar();
+      if(ghConfig){
+        showLoading('Creating list...');
+        try{await ghSaveList(j.name,newList);setSyncStatus('saved','Saved');}catch(e){console.error(e);setSyncStatus('error','Error');}
+        hideLoading();
+      }
+      renderSidebar();renderWorkspace();
+    }}]);
+  focusModal();
+}
+
+function selectList(jid,lid){selectedJobId=jid;selectedListId=lid;getJob(jid)._open=true;closeSidebar();renderSidebar();renderWorkspace();}
+
+function renameList(jid,lid){
+  const j=getJob(jid),l=getList(jid,lid);
+  openModal('Rename List',`<label>List Name</label><input id="mInput" value="${esc(l.name)}">`,
+    [{label:'Save',cls:'btn-accent',action:async()=>{
+      const newName=document.getElementById('mInput').value.trim();
+      if(!newName||newName===l.name){closeModal();return;}
+      const oldPath=l._path;
+      l.name=newName;
+      closeModal();
+      if(ghConfig){
+        showLoading('Renaming list...');
+        try{
+          await ghSaveList(j.name,l);
+          if(oldPath&&oldPath!==l._path){try{await ghDelete(oldPath,'Rename list');}catch(e){}}
+          setSyncStatus('saved','Saved');
+        }catch(e){console.error(e);setSyncStatus('error','Error');}
+        hideLoading();
+      }
+      renderSidebar();renderWorkspace();
+    }}]);
+  focusModal(true);
+}
+
+function duplicateList(jid,lid){
+  const j=getJob(jid),l=getList(jid,lid);
+  const copy=JSON.parse(JSON.stringify(l));
+  copy.id=uid();copy.name=l.name+' copy';delete copy._path;
+  j.lists.push(copy);
+  if(ghConfig){
+    (async()=>{
+      try{await ghSaveList(j.name,copy);setSyncStatus('saved','Saved');}catch(e){setSyncStatus('error','Error');}
+    })();
+  }
+  renderSidebar();
+}
+
+function moveList(jid,lid){
+  const otherJobs=data.jobs.filter(j=>j.id!==jid);
+  if(!otherJobs.length){alert('No other jobs to move to.');return;}
+  const opts=otherJobs.map(j=>`<option value="${j.id}">${esc(j.name)}</option>`).join('');
+  openModal('Move List',`<label>Move to Job</label><select id="mJob">${opts}</select>`,
+    [{label:'Cancel',cls:'btn-outline',action(){closeModal();}},{label:'Move',cls:'btn-accent',action:async()=>{
+      const targetJid=document.getElementById('mJob').value;
+      const srcJob=getJob(jid),tgtJob=getJob(targetJid);
+      const idx=srcJob.lists.findIndex(l=>l.id===lid);
+      const [moved]=srcJob.lists.splice(idx,1);
+      const oldPath=moved._path;
+      tgtJob.lists.push(moved);tgtJob._open=true;
+      if(selectedListId===lid) selectedJobId=targetJid;
+      closeModal();
+      if(ghConfig){
+        showLoading('Moving list...');
+        try{
+          delete moved._path;
+          await ghSaveList(tgtJob.name,moved);
+          if(oldPath){try{await ghDelete(oldPath,'Move list');}catch(e){}}
+          setSyncStatus('saved','Saved');
+        }catch(e){console.error(e);setSyncStatus('error','Error');}
+        hideLoading();
+      }
+      renderSidebar();renderWorkspace();
+    }}]);
+}
+
+function deleteList(jid,lid){
+  const l=getList(jid,lid);
+  openModal('Delete List',`<p style="margin-bottom:8px">Delete <strong>${esc(l.name)}</strong>?</p><p style="font-size:12px;color:var(--text-muted)">File will be removed from the repository.</p>`,
+    [{label:'Cancel',cls:'btn-outline',action(){closeModal();}},{label:'Delete',cls:'btn-danger',action:async()=>{
+      closeModal();
+      if(ghConfig){
+        showLoading('Deleting list...');
+        try{await ghDeleteList(l);setSyncStatus('saved','Saved');}catch(e){console.error(e);setSyncStatus('error','Error');}
+        hideLoading();
+      }
+      const j=getJob(jid);j.lists=j.lists.filter(x=>x.id!==lid);
+      if(selectedListId===lid) selectedListId=null;
+      renderSidebar();renderWorkspace();
+    }}]);
+}
+
+// ===================================================================
+// DRAWER ACTIONS
+// ===================================================================
+function addDrawer(){
+  const list=getList(selectedJobId,selectedListId);if(!list)return;
+  list.drawers.push({openWidth:'',openDepth:'',height:4,qty:1});
+  renderWorkspace();
+  setTimeout(()=>{
+    const inputs=document.querySelectorAll('.drawer-card-body input[type="text"], .drawer-table input[type="text"]');
+    for(let inp of inputs){if(!inp.value){inp.focus();break;}}
+  },80);
+}
+function updateDrawer(idx,field,val){
+  const list=getList(selectedJobId,selectedListId);if(!list)return;
+  list.drawers[idx][field]=val;renderWorkspace();
+}
+function removeDrawer(idx){
+  const list=getList(selectedJobId,selectedListId);if(!list)return;
+  list.drawers.splice(idx,1);renderWorkspace();
+}
+function duplicateDrawer(idx){
+  const list=getList(selectedJobId,selectedListId);if(!list)return;
+  const copy=JSON.parse(JSON.stringify(list.drawers[idx]));
+  list.drawers.splice(idx+1,0,copy);renderWorkspace();
+}
+function moveDrawer(idx,dir){
+  const list=getList(selectedJobId,selectedListId);if(!list)return;
+  const ni=idx+dir;if(ni<0||ni>=list.drawers.length)return;
+  [list.drawers[idx],list.drawers[ni]]=[list.drawers[ni],list.drawers[idx]];
+  renderWorkspace();
+}
+function clearAllDrawers(){
+  const list=getList(selectedJobId,selectedListId);if(!list||!list.drawers.length)return;
+  openModal('Clear All',`<p>Remove all ${list.drawers.length} drawer(s)?</p>`,
+    [{label:'Cancel',cls:'btn-outline',action(){closeModal();}},{label:'Clear All',cls:'btn-danger',action(){
+      list.drawers=[];closeModal();renderWorkspace();
+    }}]);
+}
+function editDrawerModal(idx){
+  const list=getList(selectedJobId,selectedListId);if(!list)return;
+  const d=list.drawers[idx];
+  openModal(`Edit Drawer #${idx+1}`,
+    `<label>Opening Width</label><input id="mW" value="${esc(d.openWidth)}" placeholder="30 9/16">
+     <label>Opening Depth</label><input id="mD" value="${esc(d.openDepth)}" placeholder="21">
+     <label>Height</label><select id="mH">${[4,6,8,10].map(v=>`<option value="${v}"${d.height===v?' selected':''}>${v}"</option>`).join('')}</select>
+     <label>Quantity</label><input id="mQ" value="${d.qty}" inputmode="numeric">`,
+    [{label:'Cancel',cls:'btn-outline',action(){closeModal();}},{label:'Save',cls:'btn-accent',action(){
+      d.openWidth=document.getElementById('mW').value.trim();
+      d.openDepth=document.getElementById('mD').value.trim();
+      d.height=parseInt(document.getElementById('mH').value);
+      d.qty=Math.max(1,parseInt(document.getElementById('mQ').value)||1);
+      closeModal();renderWorkspace();
+    }}]);
+  focusModal();
+}
+
+// ===================================================================
+// REFRESH FROM GIT
+// ===================================================================
+async function refreshFromGit(){
+  if(!ghConfig) return;
+  showLoading('Refreshing from GitHub...');
+  try{
+    selectedJobId=null;selectedListId=null;
+    await ghLoadAll();
+    setSyncStatus('saved','Synced');
+  }catch(e){console.error(e);setSyncStatus('error','Error');}
+  hideLoading();
+  renderSidebar();renderWorkspace();
+}
+
+// ===================================================================
+// OFFLINE FILE I/O
+// ===================================================================
+function getCleanData(){return JSON.parse(JSON.stringify(data,(k,v)=>k.startsWith('_')?undefined:v));}
+function exportData(){dl(JSON.stringify(getCleanData(),null,2),'drawer-cutlist-export.json');}
+function dl(content,fn){const b=new Blob([content],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=fn;a.click();URL.revokeObjectURL(a.href);}
+function importData(e){
+  const file=e.target.files[0];if(!file)return;
+  const r=new FileReader();
+  r.onload=function(ev){
+    try{const imp=JSON.parse(ev.target.result);if(imp.jobs){imp.jobs.forEach(j=>{j.id=uid();j.lists.forEach(l=>{l.id=uid();});data.jobs.push(j);});renderSidebar();renderWorkspace();alert('Imported '+imp.jobs.length+' job(s).');}}
+    catch(err){alert('Invalid file: '+err.message);}
+  };r.readAsText(file);e.target.value='';
+}
+function offlineSave(){
+  if(!ghConfig){try{localStorage.setItem('drawerCalcOffline',JSON.stringify(getCleanData()));}catch(e){}}
+}
+
+// ===================================================================
+// MODAL
+// ===================================================================
+let modalKeyHandler=null;
+function openModal(title,bodyHtml,buttons){
+  document.getElementById('modalTitle').textContent=title;
+  document.getElementById('modalBody').innerHTML=bodyHtml;
+  let fh='';
+  buttons.forEach((b,i)=>{fh+=`<button class="btn ${b.cls}" id="mbtn${i}">${b.label}</button>`;});
+  document.getElementById('modalFooter').innerHTML=fh;
+  buttons.forEach((b,i)=>{document.getElementById('mbtn'+i).onclick=b.action;});
+  document.getElementById('modalOverlay').classList.add('show');
+  if(modalKeyHandler) document.removeEventListener('keydown',modalKeyHandler);
+  modalKeyHandler=e=>{
+    if(e.key==='Enter'){e.preventDefault();buttons[buttons.length-1].action();}
+    if(e.key==='Escape'){closeModal();}
+  };
+  document.addEventListener('keydown',modalKeyHandler);
+}
+function closeModal(){
+  document.getElementById('modalOverlay').classList.remove('show');
+  if(modalKeyHandler){document.removeEventListener('keydown',modalKeyHandler);modalKeyHandler=null;}
+}
+document.getElementById('modalOverlay').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
+function focusModal(sel){setTimeout(()=>{const i=document.getElementById('mInput')||document.getElementById('mW');if(i){i.focus();if(sel&&i.select)i.select();}},120);}
+
+// ===================================================================
+// PRINT
+// ===================================================================
+function generatePrintContent(jobs){
+  let h='';
+  jobs.forEach(job=>{
+    h+=`<h1>${esc(job.name)}</h1>`;
+    job.lists.forEach(list=>{
+      if(!list.drawers.length) return;
+      h+=`<h2>${esc(list.name)}</h2>`;
+      h+='<h3>Opening Sizes (Reference)</h3><table><thead><tr><th>#</th><th>Width</th><th>Depth</th><th>Height</th><th>Qty</th></tr></thead><tbody>';
+      list.drawers.forEach((d,i)=>{h+=`<tr><td>${i+1}</td><td class="mono">${esc(d.openWidth)}</td><td class="mono">${esc(d.openDepth)}</td><td>${d.height}"</td><td>${d.qty}</td></tr>`;});
+      h+='</tbody></table>';
+      h+='<h3>Cut List</h3><table><thead><tr><th>#</th><th>F/B (&times;2)</th><th>Sides (&times;2)</th><th>Bottom</th><th>Height</th><th>Qty</th></tr></thead><tbody>';
+      const hg={4:[],6:[],8:[],10:[]},allBot=[];
+      list.drawers.forEach((d,i)=>{
+        const c=calcDrawer(d);
+        h+=`<tr><td>${i+1}</td><td class="mono">${dd(c.cutW)}</td><td class="mono">${dd(c.cutD)}</td><td class="mono">${dd(c.botW)} &times; ${dd(c.botD)}</td><td>${d.height}"</td><td>${d.qty}</td></tr>`;
+        if(!isNaN(c.cutW)&&!isNaN(c.cutD)){
+          if(!hg[d.height])hg[d.height]=[];
+          hg[d.height].push({len:c.cutW,label:`F/B ${dd(c.cutW)}`,count:2*d.qty});
+          hg[d.height].push({len:c.cutD,label:`S ${dd(c.cutD)}`,count:2*d.qty});
+          for(let q=0;q<d.qty;q++) allBot.push({label:`${dd(c.botW)} &times; ${dd(c.botD)}`});
+        }
+      });
+      h+='</tbody></table>';
+      h+='<h3>Board Cutting Layout (96" Boards)</h3>';
+      let tB=0,tW=0;
+      for(const ht of [4,6,8,10]){
+        const pcs=hg[ht];if(!pcs||!pcs.length||pcs.every(p=>p.count===0))continue;
+        const boards=optimizeCuts(pcs,96);tB+=boards.length;
+        h+=`<div style="margin:8px 0 4px;font-weight:700;font-size:12px">${ht}" Stock — ${boards.length} board${boards.length!==1?'s':''}</div>`;
+        boards.forEach(b=>{tW+=b.remaining;
+          h+=`<div style="display:flex;height:22px;border:1.5px solid #333;margin:3px 0;font-size:9px;overflow:hidden">`;
+          b.pieces.forEach(p=>{h+=`<div style="width:${(p.len/96*100).toFixed(1)}%;background:#ddd;border-right:1.5px solid #333;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden">${p.label}</div>`;});
+          h+=`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#999;font-style:italic">${dd(b.remaining)}" drop</div></div>`;
+        });
+      }
+      if(allBot.length){
+        h+=`<div style="margin:10px 0 4px;font-weight:700;font-size:12px">Bottoms — ${allBot.length} piece${allBot.length!==1?'s':''}</div>`;
+        h+='<table><thead><tr><th>#</th><th>Size</th></tr></thead><tbody>';
+        allBot.forEach((b,i)=>{h+=`<tr><td>${i+1}</td><td class="mono">${b.label}</td></tr>`;});
+        h+='</tbody></table>';
+      }
+      h+=`<div style="border:2px solid #333;padding:10px;margin:12px 0;font-weight:600;font-size:12px;line-height:1.7"><strong>Summary:</strong> ${tB} board${tB!==1?'s':''}`;
+      for(const ht of [4,6,8,10]){const pcs=hg[ht];if(!pcs||!pcs.length||pcs.every(p=>p.count===0))continue;h+=` | ${ht}": ${optimizeCuts(pcs,96).length}`;}
+      h+=` | Bottoms: ${allBot.length} | Drop: ${dd(tW)}"</div>`;
+    });
+  });
+  return h;
+}
+function printCurrentList(){
+  if(!selectedJobId||!selectedListId)return;
+  const job=getJob(selectedJobId),list=getList(selectedJobId,selectedListId);if(!job||!list)return;
+  document.getElementById('printArea').innerHTML=generatePrintContent([{name:job.name,lists:[list]}]);
+  setTimeout(()=>window.print(),150);
+}
+function printJob(){
+  if(!selectedJobId)return;
+  document.getElementById('printArea').innerHTML=generatePrintContent([getJob(selectedJobId)]);
+  setTimeout(()=>window.print(),150);
+}
+
+// ===================================================================
+// HELPERS
+// ===================================================================
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+
+// ===================================================================
+// BOOT
+// ===================================================================
+(async function boot(){
+  // Pre-fill from saved config
+  const saved=loadConfig();
+  if(saved){
+    document.getElementById('loginToken').value=saved.token||'';
+    document.getElementById('loginOwner').value=saved.owner||'';
+    document.getElementById('loginRepo').value=saved.repo||'';
+    document.getElementById('loginFolder').value=saved.folder||'jobs';
+    // Auto-connect
+    ghConfig=saved;
+    document.getElementById('loginScreen').style.display='none';
+    try{
+      await initApp();
+    }catch(e){
+      console.error('Auto-connect failed:',e);
+      ghConfig=null;
+      document.getElementById('loginScreen').style.display='flex';
+      document.getElementById('app').classList.remove('ready');
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
