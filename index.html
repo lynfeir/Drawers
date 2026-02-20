@@ -790,6 +790,24 @@ function renderCutSummary(list){
     for(let q=0;q<d.qty;q++) bottoms.push({w:c.botW,d:c.botD,label:`${dd(c.botW)} × ${dd(c.botD)}`});
   });
   let h='<div class="card"><div class="card-header"><h2>Cut Optimization (96" Boards)</h2><button class="btn btn-accent btn-sm" onclick="printCurrentList()" style="flex-shrink:0">Print Cut List</button></div><div class="card-body">';
+  // Consolidated parts list
+  h+=`<div style="font-weight:700;font-size:15px;margin:8px 0 8px">Parts List</div>`;
+  h+='<table class="drawer-table" style="margin-bottom:16px"><thead><tr><th>Qty</th><th>Part</th><th>Size</th><th>Height</th></tr></thead><tbody>';
+  for(const ht of [4,6,8,10]){
+    const pcs=groups[ht];if(!pcs||!pcs.length)continue;
+    const partMap={};
+    pcs.forEach(p=>{const k=p.label;if(partMap[k])partMap[k]+=p.count;else partMap[k]=p.count;});
+    Object.keys(partMap).forEach(k=>{
+      const isF=k.startsWith('F/B');
+      h+=`<tr><td class="mono" style="font-weight:700">${partMap[k]}</td><td>${isF?'Front/Back':'Side'}</td><td class="calc">${k.replace(/^(F\/B|S)\s*/,'')}</td><td>${ht}"</td></tr>`;
+    });
+  }
+  const botGroupsTable={};
+  bottoms.forEach(b=>{if(botGroupsTable[b.label])botGroupsTable[b.label]++;else botGroupsTable[b.label]=1;});
+  Object.keys(botGroupsTable).forEach(k=>{
+    h+=`<tr><td class="mono" style="font-weight:700">${botGroupsTable[k]}</td><td>Bottom</td><td class="calc">${k}</td><td>—</td></tr>`;
+  });
+  h+='</tbody></table>';
   let totalBoards=0,totalWaste=0;
   for(const ht of [4,6,8,10]){
     const pcs=groups[ht];
@@ -806,8 +824,11 @@ function renderCutSummary(list){
   }
   if(bottoms.length){
     h+=`<div style="font-weight:700;font-size:15px;margin:18px 0 8px">Bottoms — ${bottoms.length} piece${bottoms.length!==1?'s':''}</div>`;
-    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
-    bottoms.forEach(b=>{h+=`<span class="bottom-chip mono">${b.label}</span>`;});
+    // Group identical bottoms
+    const botGroups={};
+    bottoms.forEach(b=>{if(botGroups[b.label])botGroups[b.label]++;else botGroups[b.label]=1;});
+    h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+    Object.keys(botGroups).forEach(k=>{h+=`<span class="bottom-chip mono">${botGroups[k]} @ ${k}</span>`;});
     h+='</div>';
   }
   h+=`<div class="summary-box"><strong>Total Boards:</strong> ${totalBoards}`;
@@ -1123,17 +1144,48 @@ function generatePrintContent(jobs){
       h+='<h3>Opening Sizes (Reference)</h3><table><thead><tr><th>#</th><th>Width</th><th>Depth</th><th>Height</th><th>Qty</th></tr></thead><tbody>';
       list.drawers.forEach((d,i)=>{h+=`<tr><td>${i+1}</td><td class="mono">${esc(d.openWidth)}</td><td class="mono">${esc(d.openDepth)}</td><td>${d.height}"</td><td>${d.qty}</td></tr>`;});
       h+='</tbody></table>';
-      h+='<h3>Cut List</h3><table><thead><tr><th>#</th><th>F/B (&times;2)</th><th>Sides (&times;2)</th><th>Bottom</th><th>Height</th><th>Qty</th></tr></thead><tbody>';
-      const hg={4:[],6:[],8:[],10:[]},allBot=[];
-      list.drawers.forEach((d,i)=>{
+      // Build consolidated cut list
+      const hg={4:[],6:[],8:[],10:[]};
+      const cutLines=[]; // {qty, fb, side, bot, height}
+      const allBot=[];
+      list.drawers.forEach(d=>{
         const c=calcDrawer(d);
-        h+=`<tr><td>${i+1}</td><td class="mono">${dd(c.cutW)}</td><td class="mono">${dd(c.cutD)}</td><td class="mono">${dd(c.botW)} &times; ${dd(c.botD)}</td><td>${d.height}"</td><td>${d.qty}</td></tr>`;
         if(!isNaN(c.cutW)&&!isNaN(c.cutD)){
+          cutLines.push({qty:d.qty,fb:dd(c.cutW),side:dd(c.cutD),bot:`${dd(c.botW)} &times; ${dd(c.botD)}`,height:d.height});
           if(!hg[d.height])hg[d.height]=[];
           hg[d.height].push({len:c.cutW,label:`F/B ${dd(c.cutW)}`,count:2*d.qty});
           hg[d.height].push({len:c.cutD,label:`S ${dd(c.cutD)}`,count:2*d.qty});
-          for(let q=0;q<d.qty;q++) allBot.push({label:`${dd(c.botW)} &times; ${dd(c.botD)}`});
+          for(let q=0;q<d.qty;q++) allBot.push(`${dd(c.botW)} &times; ${dd(c.botD)}`);
         }
+      });
+      // Group cut lines by identical dimensions
+      h+='<h3>Cut List</h3><table><thead><tr><th>Qty</th><th>F/B Length</th><th>Side Length</th><th>Bottom</th><th>Height</th></tr></thead><tbody>';
+      const grouped=[];
+      cutLines.forEach(cl=>{
+        const match=grouped.find(g=>g.fb===cl.fb&&g.side===cl.side&&g.bot===cl.bot&&g.height===cl.height);
+        if(match) match.qty+=cl.qty;
+        else grouped.push({...cl});
+      });
+      grouped.forEach(g=>{
+        h+=`<tr><td class="mono" style="font-weight:700">${g.qty}</td><td class="mono">${g.fb}</td><td class="mono">${g.side}</td><td class="mono">${g.bot}</td><td>${g.height}"</td></tr>`;
+      });
+      h+='</tbody></table>';
+      // Consolidated parts list
+      h+='<h3>Parts Summary</h3><table><thead><tr><th>Qty</th><th>Part</th><th>Size</th><th>Height</th></tr></thead><tbody>';
+      for(const ht of [4,6,8,10]){
+        const pcs=hg[ht];if(!pcs||!pcs.length)continue;
+        const partMap={};
+        pcs.forEach(p=>{const k=p.label;if(partMap[k])partMap[k]+=p.count;else partMap[k]=p.count;});
+        Object.keys(partMap).forEach(k=>{
+          const isF=k.startsWith('F/B');
+          h+=`<tr><td class="mono" style="font-weight:700">${partMap[k]}</td><td>${isF?'Front/Back':'Side'}</td><td class="mono">${k.replace(/^(F\/B|S)\s*/,'')}</td><td>${ht}"</td></tr>`;
+        });
+      }
+      // Group bottoms by size
+      const botMap={};
+      allBot.forEach(b=>{if(botMap[b])botMap[b]++;else botMap[b]=1;});
+      Object.keys(botMap).forEach(k=>{
+        h+=`<tr><td class="mono" style="font-weight:700">${botMap[k]}</td><td>Bottom</td><td class="mono">${k}</td><td>—</td></tr>`;
       });
       h+='</tbody></table>';
       h+='<h3>Board Cutting Layout (96" Boards)</h3>';
@@ -1148,10 +1200,10 @@ function generatePrintContent(jobs){
           h+=`<div style="flex:1;display:flex;align-items:center;justify-content:center;color:#999;font-style:italic">${dd(b.remaining)}" drop</div></div>`;
         });
       }
-      if(allBot.length){
+      if(Object.keys(botMap).length){
         h+=`<div style="margin:12px 0 6px;font-weight:700;font-size:14px">Bottoms — ${allBot.length} piece${allBot.length!==1?'s':''}</div>`;
-        h+='<table><thead><tr><th>#</th><th>Size</th></tr></thead><tbody>';
-        allBot.forEach((b,i)=>{h+=`<tr><td>${i+1}</td><td class="mono">${b.label}</td></tr>`;});
+        h+='<table><thead><tr><th>Qty</th><th>Size</th></tr></thead><tbody>';
+        Object.keys(botMap).forEach(k=>{h+=`<tr><td class="mono" style="font-weight:700">${botMap[k]}</td><td class="mono">${k}</td></tr>`;});
         h+='</tbody></table>';
       }
       h+=`<div style="border:2px solid #333;padding:12px;margin:14px 0;font-weight:600;font-size:13px;line-height:1.7"><strong>Summary:</strong> ${tB} board${tB!==1?'s':''}`;
