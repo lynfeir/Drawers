@@ -1,5 +1,3 @@
 {
-  "rewrites": [
-    { "source": "/", "destination": "/drawer-calculator-gh.html" }
-  ]
+  "framework": "nextjs"
 }
