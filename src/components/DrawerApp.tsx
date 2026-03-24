@@ -9,9 +9,8 @@ import Workspace from './Workspace';
 import Modal, { ModalButton } from './Modal';
 import PrintContent from './PrintContent';
 
-let _nextId = 1;
 function uid() {
-  return 'd' + _nextId++ + (Date.now() % 10000);
+  return crypto.randomUUID();
 }
 
 type SyncState = 'saved' | 'saving' | 'error' | null;
