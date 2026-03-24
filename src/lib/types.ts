@@ -46,3 +46,17 @@ export interface CutPiece {
   label: string;
   count: number;
 }
+
+export interface PlacedPiece {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label: string;
+}
+
+export interface Sheet {
+  pieces: PlacedPiece[];
+  usedArea: number;
+  totalArea: number;
+}

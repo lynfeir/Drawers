@@ -49,7 +49,7 @@ export default function Sidebar({
         <div className="sidebar-header">
           <div className="sidebar-header-text">
             <h1>&#9638; Drawer Calc</h1>
-            <p>Supabase Sync</p>
+            <p>Real-time Sync</p>
           </div>
           <button className="sidebar-close" onClick={onCloseSidebar}>
             &times;

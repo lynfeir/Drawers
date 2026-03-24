@@ -1,7 +1,6 @@
 'use client';
 
 import { Job, CutList } from '@/lib/types';
-import { calcDrawer, dd } from '@/lib/math';
 import CutSummary from './CutSummary';
 
 interface WorkspaceProps {
@@ -67,9 +66,6 @@ export default function Workspace({
                   <th>Opening D</th>
                   <th>Height</th>
                   <th>Qty</th>
-                  <th>Cut F/B</th>
-                  <th>Cut Side</th>
-                  <th>Bottom</th>
                   <th style={{ minWidth: 120 }}>Actions</th>
                 </tr>
               </thead>
@@ -77,7 +73,7 @@ export default function Workspace({
                 {list.drawers.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={6}
                       style={{
                         textAlign: 'center',
                         padding: 20,
@@ -89,7 +85,6 @@ export default function Workspace({
                   </tr>
                 ) : (
                   list.drawers.map((d, i) => {
-                    const c = calcDrawer(d);
                     return (
                       <tr key={i}>
                         <td
@@ -151,15 +146,6 @@ export default function Workspace({
                             }
                           />
                         </td>
-                        <td className="calc">
-                          {dd(c.cutW)} &times; {d.height}&quot;
-                        </td>
-                        <td className="calc">
-                          {dd(c.cutD)} &times; {d.height}&quot;
-                        </td>
-                        <td className="calc">
-                          {dd(c.botW)} &times; {dd(c.botD)}
-                        </td>
                         <td className="act-cell">
                           <button
                             className="btn-icon"
@@ -216,7 +202,6 @@ export default function Workspace({
             </div>
           ) : (
             list.drawers.map((d, i) => {
-              const c = calcDrawer(d);
               return (
                 <div className="drawer-card" key={i}>
                   <div className="drawer-card-header">
@@ -312,26 +297,6 @@ export default function Workspace({
                           inputMode="numeric"
                         />
                       </div>
-                    </div>
-                  </div>
-                  <div className="drawer-results">
-                    <div className="res">
-                      <span className="res-label">F/B Cut</span>
-                      <span className="res-val">
-                        {dd(c.cutW)} &times; {d.height}&quot;
-                      </span>
-                    </div>
-                    <div className="res">
-                      <span className="res-label">Side Cut</span>
-                      <span className="res-val">
-                        {dd(c.cutD)} &times; {d.height}&quot;
-                      </span>
-                    </div>
-                    <div className="res">
-                      <span className="res-label">Bottom</span>
-                      <span className="res-val">
-                        {dd(c.botW)} &times; {dd(c.botD)}
-                      </span>
                     </div>
                   </div>
                 </div>

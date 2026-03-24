@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AppData, Job, CutList } from '@/lib/types';
 import { loadLocal, saveLocal, saveToSupabase, loadFromSupabase, deleteJobFromSupabase, deleteListFromSupabase } from '@/lib/storage';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { isSupabaseConfigured, subscribeToChanges } from '@/lib/supabase';
 import Sidebar from './Sidebar';
 import Workspace from './Workspace';
 import Modal, { ModalButton } from './Modal';
@@ -37,6 +37,7 @@ export default function DrawerApp() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
+  const lastSaveRef = useRef(0);
 
   const hasSupabase = isSupabaseConfigured();
 
@@ -65,7 +66,9 @@ export default function DrawerApp() {
           setSyncState('saving');
           if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
           saveTimerRef.current = setTimeout(async () => {
+            lastSaveRef.current = Date.now();
             const ok = await saveToSupabase(next);
+            lastSaveRef.current = Date.now();
             setSyncState(ok ? 'saved' : 'error');
           }, 1500);
         }
@@ -126,6 +129,38 @@ export default function DrawerApp() {
       setLoading(false);
     }
     boot();
+  }, [hasSupabase]);
+
+  // ── Real-time sync ──
+
+  useEffect(() => {
+    if (!hasSupabase) return;
+
+    let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const unsubscribe = subscribeToChanges(() => {
+      if (Date.now() - lastSaveRef.current < 3000) return;
+      if (reloadTimer) clearTimeout(reloadTimer);
+      reloadTimer = setTimeout(async () => {
+        const fresh = await loadFromSupabase();
+        if (fresh) {
+          fresh.jobs.forEach((j) => {
+            const existing = dataRef.current.jobs.find((pj) => pj.id === j.id);
+            j._open = existing ? existing._open : true;
+            if (!j.id) j.id = uid();
+            j.lists.forEach((l) => { if (!l.id) l.id = uid(); });
+          });
+          setData(fresh);
+          saveLocal(fresh);
+          setSyncState('saved');
+        }
+      }, 500);
+    });
+
+    return () => {
+      if (reloadTimer) clearTimeout(reloadTimer);
+      if (unsubscribe) unsubscribe();
+    };
   }, [hasSupabase]);
 
   // ── Job Actions ──
@@ -213,7 +248,10 @@ export default function DrawerApp() {
             label: 'Delete',
             cls: 'btn-danger',
             action: () => {
-              if (hasSupabase) deleteJobFromSupabase(jid);
+              if (hasSupabase) {
+                lastSaveRef.current = Date.now();
+                deleteJobFromSupabase(jid);
+              }
               updateData((d) => ({
                 ...d,
                 jobs: d.jobs.filter((x) => x.id !== jid),
@@ -435,7 +473,10 @@ export default function DrawerApp() {
             label: 'Delete',
             cls: 'btn-danger',
             action: () => {
-              if (hasSupabase) deleteListFromSupabase(lid);
+              if (hasSupabase) {
+                lastSaveRef.current = Date.now();
+                deleteListFromSupabase(lid);
+              }
               updateData((d) => ({
                 ...d,
                 jobs: d.jobs.map((j) =>
@@ -689,8 +730,13 @@ export default function DrawerApp() {
             color: hasSupabase ? 'var(--success)' : 'var(--text-muted)',
           }}
         >
-          {hasSupabase ? 'Connected to Supabase' : 'Offline Mode (localStorage only)'}
+          {hasSupabase ? 'Connected \u2014 Real-time Sync' : 'Offline Mode (localStorage only)'}
         </p>
+        {hasSupabase && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+            Enable Realtime on jobs, lists, and drawers tables in Supabase for live sync across devices.
+          </p>
+        )}
         {!hasSupabase && (
           <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to

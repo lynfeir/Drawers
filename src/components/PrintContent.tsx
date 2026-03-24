@@ -1,7 +1,7 @@
 'use client';
 
 import { Job, CutPiece } from '@/lib/types';
-import { calcDrawer, dd, optimizeCuts } from '@/lib/math';
+import { calcDrawer, dd, optimizeCuts, optimizeSheets } from '@/lib/math';
 
 interface PrintContentProps {
   jobs: Job[];
@@ -16,8 +16,8 @@ export default function PrintContent({ jobs }: PrintContentProps) {
           {job.lists.map((list) => {
             if (!list.drawers.length) return null;
 
-            const hg: Record<number, CutPiece[]> = { 4: [], 6: [], 8: [], 10: [] };
-            const allBot: string[] = [];
+            const hg: Record<number, CutPiece[]> = {};
+            const bottomPieces: { w: number; d: number; label: string; count: number }[] = [];
             const cutLines: {
               qty: number;
               fb: string;
@@ -39,9 +39,11 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                 if (!hg[d.height]) hg[d.height] = [];
                 hg[d.height].push({ len: c.cutW, label: `F/B ${dd(c.cutW)}`, count: 2 * d.qty });
                 hg[d.height].push({ len: c.cutD, label: `S ${dd(c.cutD)}`, count: 2 * d.qty });
-                for (let q = 0; q < d.qty; q++) {
-                  allBot.push(`${dd(c.botW)} \u00d7 ${dd(c.botD)}`);
-                }
+
+                const botLabel = `${dd(c.botW)} \u00d7 ${dd(c.botD)}`;
+                const existing = bottomPieces.find((b) => b.label === botLabel);
+                if (existing) existing.count += d.qty;
+                else bottomPieces.push({ w: c.botW, d: c.botD, label: botLabel, count: d.qty });
               }
             });
 
@@ -55,12 +57,8 @@ export default function PrintContent({ jobs }: PrintContentProps) {
               else grouped.push({ ...cl });
             });
 
-            const botMap: Record<string, number> = {};
-            allBot.forEach((b) => {
-              if (botMap[b]) botMap[b]++;
-              else botMap[b] = 1;
-            });
-
+            const sheets = bottomPieces.length > 0 ? optimizeSheets(bottomPieces, 96, 48) : [];
+            const totalBottoms = bottomPieces.reduce((sum, p) => sum + p.count, 0);
             let tB = 0;
             let tW = 0;
 
@@ -68,27 +66,29 @@ export default function PrintContent({ jobs }: PrintContentProps) {
               <div key={list.id}>
                 <h2>{list.name}</h2>
 
-                <h3>Opening Sizes (Reference)</h3>
+                <h3>Material List</h3>
                 <table>
                   <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Width</th>
-                      <th>Depth</th>
-                      <th>Height</th>
-                      <th>Qty</th>
-                    </tr>
+                    <tr><th>Qty</th><th>Material</th></tr>
                   </thead>
                   <tbody>
-                    {list.drawers.map((d, i) => (
-                      <tr key={i}>
-                        <td>{i + 1}</td>
-                        <td className="mono">{d.openWidth}</td>
-                        <td className="mono">{d.openDepth}</td>
-                        <td>{d.height}&quot;</td>
-                        <td>{d.qty}</td>
+                    {[4, 6, 8, 10].map((ht) => {
+                      const pcs = hg[ht];
+                      if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return null;
+                      const boards = optimizeCuts(pcs, 96);
+                      return (
+                        <tr key={ht}>
+                          <td className="mono" style={{ fontWeight: 700 }}>{boards.length}</td>
+                          <td>96&quot; board{boards.length !== 1 ? 's' : ''} &mdash; {ht}&quot; stock</td>
+                        </tr>
+                      );
+                    })}
+                    {sheets.length > 0 && (
+                      <tr>
+                        <td className="mono" style={{ fontWeight: 700 }}>{sheets.length}</td>
+                        <td>4&prime;&times;8&prime; plywood sheet{sheets.length !== 1 ? 's' : ''} (1/4&quot;)</td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
 
@@ -111,48 +111,6 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                         <td className="mono">{g.side}</td>
                         <td className="mono">{g.bot}</td>
                         <td>{g.height}&quot;</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                <h3>Parts Summary</h3>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Qty</th>
-                      <th>Part</th>
-                      <th>Size</th>
-                      <th>Height</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[4, 6, 8, 10].map((ht) => {
-                      const pcs = hg[ht];
-                      if (!pcs || !pcs.length) return null;
-                      const partMap: Record<string, number> = {};
-                      pcs.forEach((p) => {
-                        if (partMap[p.label]) partMap[p.label] += p.count;
-                        else partMap[p.label] = p.count;
-                      });
-                      return Object.keys(partMap).map((k) => {
-                        const isF = k.startsWith('F/B');
-                        return (
-                          <tr key={`${ht}-${k}`}>
-                            <td className="mono" style={{ fontWeight: 700 }}>{partMap[k]}</td>
-                            <td>{isF ? 'Front/Back' : 'Side'}</td>
-                            <td className="mono">{k.replace(/^(F\/B|S)\s*/, '')}</td>
-                            <td>{ht}&quot;</td>
-                          </tr>
-                        );
-                      });
-                    })}
-                    {Object.keys(botMap).map((k) => (
-                      <tr key={`bot-${k}`}>
-                        <td className="mono" style={{ fontWeight: 700 }}>{botMap[k]}</td>
-                        <td>Bottom</td>
-                        <td className="mono">{k}</td>
-                        <td>&mdash;</td>
                       </tr>
                     ))}
                   </tbody>
@@ -219,27 +177,43 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                   );
                 })}
 
-                {Object.keys(botMap).length > 0 && (
+                {sheets.length > 0 && (
                   <>
-                    <div style={{ margin: '12px 0 6px', fontWeight: 700, fontSize: 14 }}>
-                      Bottoms &mdash; {allBot.length} piece{allBot.length !== 1 ? 's' : ''}
-                    </div>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Qty</th>
-                          <th>Size</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {Object.keys(botMap).map((k) => (
-                          <tr key={k}>
-                            <td className="mono" style={{ fontWeight: 700 }}>{botMap[k]}</td>
-                            <td className="mono">{k}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <h3>Plywood Sheet Layout (48&quot; &times; 96&quot;)</h3>
+                    {sheets.map((s, si) => (
+                      <div key={si}>
+                        <div style={{ margin: '8px 0 4px', fontWeight: 600, fontSize: 12 }}>
+                          Sheet {si + 1} &mdash; {s.pieces.length} piece{s.pieces.length !== 1 ? 's' : ''},{' '}
+                          {((s.usedArea / s.totalArea) * 100).toFixed(0)}% used
+                        </div>
+                        <div style={{
+                          position: 'relative',
+                          width: '100%',
+                          aspectRatio: '2/1',
+                          border: '2px solid #333',
+                          marginBottom: 8,
+                        }}>
+                          {s.pieces.map((p, pi) => (
+                            <div key={pi} style={{
+                              position: 'absolute',
+                              left: `${(p.x / 96) * 100}%`,
+                              top: `${(p.y / 48) * 100}%`,
+                              width: `${(p.w / 96) * 100}%`,
+                              height: `${(p.h / 48) * 100}%`,
+                              border: '1px solid #333',
+                              background: '#eee',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: 9,
+                              overflow: 'hidden',
+                            }}>
+                              {p.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </>
                 )}
 
@@ -263,7 +237,8 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                       </span>
                     );
                   })}
-                  {' '}| Bottoms: {allBot.length} | Drop: {dd(tW)}&quot;
+                  {sheets.length > 0 && <> | Sheets: {sheets.length}</>}
+                  {' '}| Bottoms: {totalBottoms} | Drop: {dd(tW)}&quot;
                 </div>
               </div>
             );
