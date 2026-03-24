@@ -1,76 +1,85 @@
 'use client';
 
-import { CutList, CutPiece } from '@/lib/types';
-import { calcDrawer, dd, optimizeCuts, optimizeSheets } from '@/lib/math';
+import { CutList } from '@/lib/types';
+import { calcDrawer, dd, optimizeSheets } from '@/lib/math';
 
 interface CutSummaryProps {
   list: CutList;
   onPrint: () => void;
 }
 
+interface DrawerGroup {
+  cutW: number;
+  cutD: number;
+  height: number;
+  slideSize: number;
+  botW: number;
+  botD: number;
+  totalQty: number;
+}
+
 export default function CutSummary({ list, onPrint }: CutSummaryProps) {
-  const groups: Record<number, CutPiece[]> = {};
-  const bottomPieces: { w: number; d: number; label: string; count: number }[] = [];
+  const calcs = list.drawers
+    .map((d) => ({ drawer: d, calc: calcDrawer(d) }))
+    .filter(({ calc }) => !isNaN(calc.cutW) && !isNaN(calc.cutD));
 
-  list.drawers.forEach((d) => {
-    const c = calcDrawer(d);
-    if (isNaN(c.cutW) || isNaN(c.cutD)) return;
-    if (!groups[d.height]) groups[d.height] = [];
-    groups[d.height].push({ len: c.cutW, label: `F/B ${dd(c.cutW)}`, count: 2 * d.qty });
-    groups[d.height].push({ len: c.cutD, label: `S ${dd(c.cutD)}`, count: 2 * d.qty });
+  if (calcs.length === 0) return null;
 
-    const botLabel = `${dd(c.botW)} \u00d7 ${dd(c.botD)}`;
-    const existing = bottomPieces.find((b) => b.label === botLabel);
+  // Group by unique drawer configuration
+  const groups: DrawerGroup[] = [];
+  calcs.forEach(({ calc }) => {
+    const existing = groups.find(
+      (g) => g.cutW === calc.cutW && g.cutD === calc.cutD && g.height === calc.height
+    );
     if (existing) {
-      existing.count += d.qty;
+      existing.totalQty += calc.qty;
     } else {
-      bottomPieces.push({ w: c.botW, d: c.botD, label: botLabel, count: d.qty });
+      groups.push({
+        cutW: calc.cutW,
+        cutD: calc.cutD,
+        height: calc.height,
+        slideSize: calc.slideSize,
+        botW: calc.botW,
+        botD: calc.botD,
+        totalQty: calc.qty,
+      });
     }
   });
 
-  // Board optimization
-  const boardSections: { height: number; boards: ReturnType<typeof optimizeCuts> }[] = [];
-  let totalBoards = 0;
-  let totalWaste = 0;
+  // Collect pieces for sheet optimization
+  const boxPieces: { w: number; d: number; label: string; count: number }[] = [];
+  const bottomPieces: { w: number; d: number; label: string; count: number }[] = [];
 
-  for (const ht of [4, 6, 8, 10]) {
-    const pcs = groups[ht];
-    if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) continue;
-    const boards = optimizeCuts(pcs, 96);
-    totalBoards += boards.length;
-    boards.forEach((b) => (totalWaste += b.remaining));
-    boardSections.push({ height: ht, boards });
-  }
-
-  // Sheet optimization for bottoms
-  const sheets = bottomPieces.length > 0 ? optimizeSheets(bottomPieces, 96, 48) : [];
-  const totalBottoms = bottomPieces.reduce((sum, p) => sum + p.count, 0);
-  const totalSheetUsed = sheets.reduce((sum, s) => sum + s.usedArea, 0);
-  const totalSheetArea = sheets.length * 96 * 48;
-
-  // Parts list
-  const partsRows: { qty: number; part: string; size: string; stock: string }[] = [];
-  for (const ht of [4, 6, 8, 10]) {
-    const pcs = groups[ht];
-    if (!pcs || !pcs.length) continue;
-    const partMap: Record<string, number> = {};
-    pcs.forEach((p) => {
-      if (partMap[p.label]) partMap[p.label] += p.count;
-      else partMap[p.label] = p.count;
+  groups.forEach((g) => {
+    boxPieces.push({
+      w: g.cutW,
+      d: g.height,
+      label: `FB ${dd(g.cutW)}x${dd(g.height)}`,
+      count: 2 * g.totalQty,
     });
-    Object.keys(partMap).forEach((k) => {
-      const isF = k.startsWith('F/B');
-      partsRows.push({
-        qty: partMap[k],
-        part: isF ? 'Front/Back' : 'Side',
-        size: k.replace(/^(F\/B|S)\s*/, ''),
-        stock: `${ht}" stock`,
-      });
+    boxPieces.push({
+      w: g.cutD,
+      d: g.height,
+      label: `S ${dd(g.cutD)}x${dd(g.height)}`,
+      count: 2 * g.totalQty,
     });
-  }
-  bottomPieces.forEach((b) => {
-    partsRows.push({ qty: b.count, part: 'Bottom', size: b.label, stock: '1/4" ply' });
+
+    const botLabel = `${dd(g.botW)} \u00d7 ${dd(g.botD)}`;
+    const existing = bottomPieces.find((b) => b.label === botLabel);
+    if (existing) {
+      existing.count += g.totalQty;
+    } else {
+      bottomPieces.push({ w: g.botW, d: g.botD, label: botLabel, count: g.totalQty });
+    }
   });
+
+  const boxSheets = boxPieces.length > 0 ? optimizeSheets(boxPieces, 96, 48) : [];
+  const bottomSheets = bottomPieces.length > 0 ? optimizeSheets(bottomPieces, 96, 48) : [];
+  const totalBoxUsed = boxSheets.reduce((sum, s) => sum + s.usedArea, 0);
+  const totalBoxArea = boxSheets.length * 96 * 48;
+  const totalBotUsed = bottomSheets.reduce((sum, s) => sum + s.usedArea, 0);
+  const totalBotArea = bottomSheets.length * 96 * 48;
+  const totalDrawers = groups.reduce((sum, g) => sum + g.totalQty, 0);
 
   return (
     <div className="card">
@@ -86,55 +95,54 @@ export default function CutSummary({ list, onPrint }: CutSummaryProps) {
         <div className="plan-section">
           <h3 className="plan-heading">Material List</h3>
           <div className="material-grid">
-            {boardSections.map((sec) => (
-              <div className="material-item" key={sec.height}>
-                <span className="material-qty">{sec.boards.length}</span>
-                <span>96&quot; board{sec.boards.length !== 1 ? 's' : ''} &mdash; {sec.height}&quot; stock</span>
-              </div>
-            ))}
-            {sheets.length > 0 && (
+            {boxSheets.length > 0 && (
               <div className="material-item">
-                <span className="material-qty">{sheets.length}</span>
-                <span>4&prime;&times;8&prime; sheet{sheets.length !== 1 ? 's' : ''} &mdash; 1/4&quot; ply</span>
+                <span className="material-qty">{boxSheets.length}</span>
+                <span>4&prime;&times;8&prime; sheet{boxSheets.length !== 1 ? 's' : ''} &mdash; box stock</span>
+              </div>
+            )}
+            {bottomSheets.length > 0 && (
+              <div className="material-item">
+                <span className="material-qty">{bottomSheets.length}</span>
+                <span>4&prime;&times;8&prime; sheet{bottomSheets.length !== 1 ? 's' : ''} &mdash; 1/4&quot; ply</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* BOARD CUTS */}
-        {boardSections.map((sec) => (
-          <div className="plan-section" key={sec.height}>
-            <h3 className="plan-heading">
-              {sec.height}&quot; Stock &mdash; {sec.boards.length} board{sec.boards.length !== 1 ? 's' : ''}
-            </h3>
-            {sec.boards.map((b, bi) => (
-              <div className="board-row mono" key={bi}>
-                {b.pieces.map((p, pi) => {
-                  const pct = ((p.len / 96) * 100).toFixed(1);
-                  return (
-                    <div key={pi} className="board-piece" style={{ width: `${pct}%` }} title={p.label}>
-                      {p.label}
-                    </div>
-                  );
-                })}
-                <div className="board-drop">{dd(b.remaining)}&quot; drop</div>
+        {/* DRAWER BREAKDOWN */}
+        <div className="plan-section">
+          <h3 className="plan-heading">Drawer Breakdown</h3>
+          {groups.map((g, i) => (
+            <div key={i} style={{
+              marginBottom: 10, padding: '8px 12px', background: '#faf8f5',
+              borderRadius: 8, border: '1px solid var(--border)',
+            }}>
+              <div style={{ fontWeight: 700, marginBottom: 4, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <span>{g.totalQty}&times; drawer{g.totalQty !== 1 ? 's' : ''}</span>
+                <span style={{ fontSize: 12, color: 'var(--accent-dark)' }}>{g.slideSize}&quot; slides</span>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{dd(g.height)}&quot; box</span>
               </div>
-            ))}
-          </div>
-        ))}
+              <div className="mono" style={{ fontSize: 12, lineHeight: 1.8, color: 'var(--text-dark)' }}>
+                {2 * g.totalQty} F/B: {dd(g.cutW)} &times; {dd(g.height)}&quot;<br />
+                {2 * g.totalQty} Side: {dd(g.cutD)} &times; {dd(g.height)}&quot;<br />
+                {g.totalQty} Bottom: {dd(g.botW)} &times; {dd(g.botD)}
+              </div>
+            </div>
+          ))}
+        </div>
 
-        {/* SHEET CUTS */}
-        {sheets.length > 0 && (
+        {/* BOX SHEETS */}
+        {boxSheets.length > 0 && (
           <div className="plan-section">
             <h3 className="plan-heading">
-              1/4&quot; Plywood Sheets
+              Box Sheets
               <span className="plan-subtext">48&quot; &times; 96&quot;</span>
             </h3>
-            {sheets.map((s, si) => (
+            {boxSheets.map((s, si) => (
               <div key={si}>
                 <div className="sheet-label">
-                  Sheet {si + 1} &mdash; {s.pieces.length} piece{s.pieces.length !== 1 ? 's' : ''},{' '}
-                  {((s.usedArea / s.totalArea) * 100).toFixed(0)}% used
+                  Sheet {si + 1} &mdash; {s.pieces.length} pc, {((s.usedArea / s.totalArea) * 100).toFixed(0)}% used
                 </div>
                 <div className="sheet-layout">
                   {s.pieces.map((p, pi) => (
@@ -158,45 +166,47 @@ export default function CutSummary({ list, onPrint }: CutSummaryProps) {
           </div>
         )}
 
-        {/* PARTS REFERENCE */}
-        <div className="plan-section">
-          <h3 className="plan-heading">Parts Reference</h3>
-          <table className="drawer-table">
-            <thead>
-              <tr>
-                <th>Qty</th>
-                <th>Part</th>
-                <th>Size</th>
-                <th>Stock</th>
-              </tr>
-            </thead>
-            <tbody>
-              {partsRows.map((r, i) => (
-                <tr key={i}>
-                  <td className="mono" style={{ fontWeight: 700 }}>{r.qty}</td>
-                  <td>{r.part}</td>
-                  <td className="calc">{r.size}</td>
-                  <td>{r.stock}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {/* BOTTOM SHEETS */}
+        {bottomSheets.length > 0 && (
+          <div className="plan-section">
+            <h3 className="plan-heading">
+              Bottom Sheets
+              <span className="plan-subtext">1/4&quot; ply, 48&quot; &times; 96&quot;</span>
+            </h3>
+            {bottomSheets.map((s, si) => (
+              <div key={si}>
+                <div className="sheet-label">
+                  Sheet {si + 1} &mdash; {s.pieces.length} pc, {((s.usedArea / s.totalArea) * 100).toFixed(0)}% used
+                </div>
+                <div className="sheet-layout">
+                  {s.pieces.map((p, pi) => (
+                    <div
+                      key={pi}
+                      className="sheet-piece"
+                      style={{
+                        left: `${(p.x / 96) * 100}%`,
+                        top: `${(p.y / 48) * 100}%`,
+                        width: `${(p.w / 96) * 100}%`,
+                        height: `${(p.h / 48) * 100}%`,
+                      }}
+                      title={p.label}
+                    >
+                      <span className="sheet-piece-label">{p.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* SUMMARY */}
         <div className="summary-box">
-          <strong>Total:</strong> {totalBoards} board{totalBoards !== 1 ? 's' : ''}
-          {sheets.length > 0 && <> + {sheets.length} plywood sheet{sheets.length !== 1 ? 's' : ''}</>}
-          <br />
-          <strong>Board waste:</strong> {dd(totalWaste)}&quot;
-          {sheets.length > 0 && totalSheetArea > 0 && (
-            <>
-              <br />
-              <strong>Plywood usage:</strong> {((totalSheetUsed / totalSheetArea) * 100).toFixed(0)}%
-            </>
-          )}
-          <br />
-          <strong>Total bottoms:</strong> {totalBottoms} piece{totalBottoms !== 1 ? 's' : ''}
+          <strong>{totalDrawers} drawer{totalDrawers !== 1 ? 's' : ''}</strong>
+          {' '}&mdash; {boxSheets.length} box sheet{boxSheets.length !== 1 ? 's' : ''}
+          {bottomSheets.length > 0 && <> + {bottomSheets.length} bottom sheet{bottomSheets.length !== 1 ? 's' : ''}</>}
+          {totalBoxArea > 0 && <><br /><strong>Box usage:</strong> {((totalBoxUsed / totalBoxArea) * 100).toFixed(0)}%</>}
+          {totalBotArea > 0 && <> | <strong>Bottom usage:</strong> {((totalBotUsed / totalBotArea) * 100).toFixed(0)}%</>}
         </div>
       </div>
     </div>

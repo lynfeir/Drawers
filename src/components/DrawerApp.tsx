@@ -511,7 +511,7 @@ export default function DrawerApp() {
                       ...l,
                       drawers: [
                         ...l.drawers,
-                        { openWidth: '', openDepth: '', height: 4, qty: 1 },
+                        { openWidth: '', openDepth: '', height: '4', qty: 1 },
                       ],
                     }
                   : l

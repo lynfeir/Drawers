@@ -78,7 +78,7 @@ export async function loadFromSupabase(): Promise<AppData | null> {
             .map((d) => ({
               openWidth: d.open_width,
               openDepth: d.open_depth,
-              height: d.height,
+              height: String(d.height ?? '4'),
               qty: d.qty,
             })),
         }));

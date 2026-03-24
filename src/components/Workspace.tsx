@@ -119,18 +119,16 @@ export default function Workspace({
                           />
                         </td>
                         <td>
-                          <select
-                            value={d.height}
-                            onChange={(e) =>
-                              onUpdateDrawer(i, 'height', +e.target.value)
+                          <input
+                            type="text"
+                            className="mono"
+                            defaultValue={d.height}
+                            onBlur={(e) =>
+                              onUpdateDrawer(i, 'height', e.target.value)
                             }
-                          >
-                            {[4, 6, 8, 10].map((v) => (
-                              <option key={v} value={v}>
-                                {v}&quot;
-                              </option>
-                            ))}
-                          </select>
+                            placeholder="4"
+                            style={{ width: 60 }}
+                          />
                         </td>
                         <td>
                           <input
@@ -269,18 +267,14 @@ export default function Workspace({
                     <div className="field-row">
                       <div className="field">
                         <label>Height</label>
-                        <select
-                          value={d.height}
-                          onChange={(e) =>
-                            onUpdateDrawer(i, 'height', +e.target.value)
+                        <input
+                          type="text"
+                          defaultValue={d.height}
+                          onBlur={(e) =>
+                            onUpdateDrawer(i, 'height', e.target.value)
                           }
-                        >
-                          {[4, 6, 8, 10].map((v) => (
-                            <option key={v} value={v}>
-                              {v}&quot;
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="4"
+                        />
                       </div>
                       <div className="field">
                         <label>Quantity</label>

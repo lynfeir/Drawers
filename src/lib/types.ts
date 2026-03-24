@@ -1,7 +1,7 @@
 export interface Drawer {
   openWidth: string;
   openDepth: string;
-  height: number;
+  height: string;
   qty: number;
 }
 
@@ -11,6 +11,7 @@ export interface DrawerCalc {
   botW: number;
   botD: number;
   height: number;
+  slideSize: number;
   qty: number;
 }
 

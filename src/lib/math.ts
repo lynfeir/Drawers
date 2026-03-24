@@ -46,15 +46,26 @@ export function dd(dec: number): string {
   return isNaN(dec) ? '—' : toFraction(dec);
 }
 
+export function getSlideSize(openDepth: number): number {
+  if (isNaN(openDepth)) return 0;
+  const clearance = 7 / 8;
+  const maxSlide = openDepth - clearance;
+  if (maxSlide < 12) return 0;
+  return Math.floor(maxSlide / 3) * 3;
+}
+
 export function calcDrawer(d: Drawer): DrawerCalc {
   const ow = parseFraction(d.openWidth);
   const od = parseFraction(d.openDepth);
+  const boxHeight = parseFraction(d.height);
+  const slideSize = getSlideSize(od);
   return {
     cutW: ow - 7 / 16,
-    cutD: od - 1 / 4,
+    cutD: slideSize > 0 ? slideSize - 27 / 32 : NaN,
     botW: (ow - 7 / 16) - 29 / 32,
-    botD: (od - 1 / 4) - 19 / 32,
-    height: d.height,
+    botD: slideSize > 0 ? (slideSize - 27 / 32) - 19 / 32 : NaN,
+    height: boxHeight,
+    slideSize: slideSize,
     qty: d.qty || 1,
   };
 }

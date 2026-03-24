@@ -1,7 +1,7 @@
 'use client';
 
-import { Job, CutPiece } from '@/lib/types';
-import { calcDrawer, dd, optimizeCuts, optimizeSheets } from '@/lib/math';
+import { Job } from '@/lib/types';
+import { calcDrawer, dd, optimizeSheets } from '@/lib/math';
 
 interface PrintContentProps {
   jobs: Job[];
@@ -16,158 +16,108 @@ export default function PrintContent({ jobs }: PrintContentProps) {
           {job.lists.map((list) => {
             if (!list.drawers.length) return null;
 
-            const hg: Record<number, CutPiece[]> = {};
-            const bottomPieces: { w: number; d: number; label: string; count: number }[] = [];
-            const cutLines: {
-              qty: number;
-              fb: string;
-              side: string;
-              bot: string;
-              height: number;
+            const calcs = list.drawers
+              .map((d) => ({ drawer: d, calc: calcDrawer(d) }))
+              .filter(({ calc }) => !isNaN(calc.cutW) && !isNaN(calc.cutD));
+
+            if (calcs.length === 0) return null;
+
+            // Group by unique config
+            const groups: {
+              cutW: number; cutD: number; height: number;
+              slideSize: number; botW: number; botD: number; totalQty: number;
             }[] = [];
-
-            list.drawers.forEach((d) => {
-              const c = calcDrawer(d);
-              if (!isNaN(c.cutW) && !isNaN(c.cutD)) {
-                cutLines.push({
-                  qty: d.qty,
-                  fb: dd(c.cutW),
-                  side: dd(c.cutD),
-                  bot: `${dd(c.botW)} \u00d7 ${dd(c.botD)}`,
-                  height: d.height,
-                });
-                if (!hg[d.height]) hg[d.height] = [];
-                hg[d.height].push({ len: c.cutW, label: `F/B ${dd(c.cutW)}`, count: 2 * d.qty });
-                hg[d.height].push({ len: c.cutD, label: `S ${dd(c.cutD)}`, count: 2 * d.qty });
-
-                const botLabel = `${dd(c.botW)} \u00d7 ${dd(c.botD)}`;
-                const existing = bottomPieces.find((b) => b.label === botLabel);
-                if (existing) existing.count += d.qty;
-                else bottomPieces.push({ w: c.botW, d: c.botD, label: botLabel, count: d.qty });
-              }
-            });
-
-            const grouped: typeof cutLines = [];
-            cutLines.forEach((cl) => {
-              const match = grouped.find(
-                (g) => g.fb === cl.fb && g.side === cl.side && g.bot === cl.bot && g.height === cl.height
+            calcs.forEach(({ calc }) => {
+              const existing = groups.find(
+                (g) => g.cutW === calc.cutW && g.cutD === calc.cutD && g.height === calc.height
               );
-              if (match) match.qty += cl.qty;
-              else grouped.push({ ...cl });
+              if (existing) existing.totalQty += calc.qty;
+              else groups.push({
+                cutW: calc.cutW, cutD: calc.cutD, height: calc.height,
+                slideSize: calc.slideSize, botW: calc.botW, botD: calc.botD,
+                totalQty: calc.qty,
+              });
             });
 
-            const sheets = bottomPieces.length > 0 ? optimizeSheets(bottomPieces, 96, 48) : [];
-            const totalBottoms = bottomPieces.reduce((sum, p) => sum + p.count, 0);
-            const totalSheetUsed = sheets.reduce((sum, s) => sum + s.usedArea, 0);
-            const totalSheetArea = sheets.length * 96 * 48;
-            let tB = 0;
-            let tW = 0;
-
-            // Pre-calculate board counts for the summary line
-            const boardCounts: string[] = [];
-            [4, 6, 8, 10].forEach((ht) => {
-              const pcs = hg[ht];
-              if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return;
-              const n = optimizeCuts(pcs, 96).length;
-              boardCounts.push(`${n}\u00d7${ht}"`);
+            // Pieces for sheets
+            const boxPieces: { w: number; d: number; label: string; count: number }[] = [];
+            const bottomPieces: { w: number; d: number; label: string; count: number }[] = [];
+            groups.forEach((g) => {
+              boxPieces.push({ w: g.cutW, d: g.height, label: `FB ${dd(g.cutW)}x${dd(g.height)}`, count: 2 * g.totalQty });
+              boxPieces.push({ w: g.cutD, d: g.height, label: `S ${dd(g.cutD)}x${dd(g.height)}`, count: 2 * g.totalQty });
+              const botLabel = `${dd(g.botW)} \u00d7 ${dd(g.botD)}`;
+              const existing = bottomPieces.find((b) => b.label === botLabel);
+              if (existing) existing.count += g.totalQty;
+              else bottomPieces.push({ w: g.botW, d: g.botD, label: botLabel, count: g.totalQty });
             });
+
+            const boxSheets = boxPieces.length > 0 ? optimizeSheets(boxPieces, 96, 48) : [];
+            const bottomSheets = bottomPieces.length > 0 ? optimizeSheets(bottomPieces, 96, 48) : [];
+            const totalDrawers = groups.reduce((sum, g) => sum + g.totalQty, 0);
+            const totalBoxUsed = boxSheets.reduce((sum, s) => sum + s.usedArea, 0);
+            const totalBoxArea = boxSheets.length * 96 * 48;
+            const totalBotUsed = bottomSheets.reduce((sum, s) => sum + s.usedArea, 0);
+            const totalBotArea = bottomSheets.length * 96 * 48;
 
             return (
               <div key={list.id}>
                 <h2>{list.name}</h2>
 
-                {/* BUY LINE — compact material summary */}
+                {/* BUY LINE */}
                 <div style={{
                   background: '#f0f0f0', border: '1.5px solid #333', borderRadius: 3,
                   padding: '3px 6px', margin: '2px 0 6px', fontWeight: 700, fontSize: 9,
                   display: 'flex', gap: 12, flexWrap: 'wrap',
                 }}>
                   <span>BUY:</span>
-                  {boardCounts.map((bc, i) => (
-                    <span key={i}>{bc} boards</span>
-                  ))}
-                  {sheets.length > 0 && (
-                    <span>{sheets.length}\u00d7 4&prime;&times;8&prime; ply</span>
-                  )}
-                  <span style={{ marginLeft: 'auto' }}>Bottoms: {totalBottoms}</span>
+                  {boxSheets.length > 0 && <span>{boxSheets.length}\u00d7 box sheet{boxSheets.length !== 1 ? 's' : ''}</span>}
+                  {bottomSheets.length > 0 && <span>{bottomSheets.length}\u00d7 bottom sheet{bottomSheets.length !== 1 ? 's' : ''}</span>}
+                  <span style={{ marginLeft: 'auto' }}>{totalDrawers} drawer{totalDrawers !== 1 ? 's' : ''}</span>
                 </div>
 
-                {/* CUT LIST — compact table */}
+                {/* DRAWER CUT LIST */}
                 <h3>Cut List</h3>
                 <table>
                   <thead>
                     <tr>
                       <th>Qty</th>
-                      <th>F/B</th>
-                      <th>Side</th>
-                      <th>Bottom</th>
-                      <th>Ht</th>
+                      <th>Part</th>
+                      <th>Size</th>
+                      <th>Slide</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {grouped.map((g, i) => (
-                      <tr key={i}>
-                        <td className="mono" style={{ fontWeight: 700 }}>{g.qty}</td>
-                        <td className="mono">{g.fb}</td>
-                        <td className="mono">{g.side}</td>
-                        <td className="mono">{g.bot}</td>
-                        <td>{g.height}&quot;</td>
-                      </tr>
+                    {groups.map((g, i) => (
+                      <>
+                        <tr key={`fb-${i}`}>
+                          <td className="mono" style={{ fontWeight: 700 }}>{2 * g.totalQty}</td>
+                          <td>F/B</td>
+                          <td className="mono">{dd(g.cutW)} &times; {dd(g.height)}&quot;</td>
+                          <td rowSpan={3} style={{ verticalAlign: 'middle', fontWeight: 600 }}>{g.slideSize}&quot;</td>
+                        </tr>
+                        <tr key={`s-${i}`}>
+                          <td className="mono" style={{ fontWeight: 700 }}>{2 * g.totalQty}</td>
+                          <td>Side</td>
+                          <td className="mono">{dd(g.cutD)} &times; {dd(g.height)}&quot;</td>
+                        </tr>
+                        <tr key={`b-${i}`} style={{ borderBottom: '2px solid #999' }}>
+                          <td className="mono" style={{ fontWeight: 700 }}>{g.totalQty}</td>
+                          <td>Bottom</td>
+                          <td className="mono">{dd(g.botW)} &times; {dd(g.botD)}</td>
+                        </tr>
+                      </>
                     ))}
                   </tbody>
                 </table>
 
-                {/* BOARD LAYOUTS — compact bars */}
-                <h3>Board Layout (96&quot;)</h3>
-                {[4, 6, 8, 10].map((ht) => {
-                  const pcs = hg[ht];
-                  if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return null;
-                  const boards = optimizeCuts(pcs, 96);
-                  tB += boards.length;
-                  return (
-                    <div key={ht}>
-                      <div style={{ fontWeight: 700, fontSize: 9, margin: '4px 0 1px' }}>
-                        {ht}&quot; &mdash; {boards.length} board{boards.length !== 1 ? 's' : ''}
-                      </div>
-                      {boards.map((b, bi) => {
-                        tW += b.remaining;
-                        return (
-                          <div key={bi} style={{
-                            display: 'flex', height: 16, border: '1px solid #333',
-                            margin: '1px 0', fontSize: 7, overflow: 'hidden',
-                          }}>
-                            {b.pieces.map((p, pi) => (
-                              <div key={pi} style={{
-                                width: `${((p.len / 96) * 100).toFixed(1)}%`,
-                                background: '#ddd', borderRight: '1px solid #333',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                whiteSpace: 'nowrap', overflow: 'hidden',
-                              }}>
-                                {p.label}
-                              </div>
-                            ))}
-                            <div style={{
-                              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              color: '#999', fontStyle: 'italic',
-                            }}>
-                              {dd(b.remaining)}&quot;
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-
-                {/* SHEET LAYOUTS — compact */}
-                {sheets.length > 0 && (
+                {/* BOX SHEET LAYOUTS */}
+                {boxSheets.length > 0 && (
                   <>
-                    <h3>Plywood Sheets (48&quot;&times;96&quot;)</h3>
-                    {sheets.map((s, si) => (
+                    <h3>Box Sheets (48&quot;&times;96&quot;)</h3>
+                    {boxSheets.map((s, si) => (
                       <div key={si}>
                         <div style={{ fontWeight: 600, fontSize: 8, margin: '3px 0 1px' }}>
-                          Sheet {si + 1} &mdash; {s.pieces.length} pc,{' '}
-                          {((s.usedArea / s.totalArea) * 100).toFixed(0)}%
+                          Sheet {si + 1} &mdash; {s.pieces.length} pc, {((s.usedArea / s.totalArea) * 100).toFixed(0)}%
                         </div>
                         <div style={{
                           position: 'relative', width: '100%', height: 70,
@@ -193,18 +143,51 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                   </>
                 )}
 
-                {/* SUMMARY — single compact line */}
+                {/* BOTTOM SHEET LAYOUTS */}
+                {bottomSheets.length > 0 && (
+                  <>
+                    <h3>Bottom Sheets (48&quot;&times;96&quot;)</h3>
+                    {bottomSheets.map((s, si) => (
+                      <div key={si}>
+                        <div style={{ fontWeight: 600, fontSize: 8, margin: '3px 0 1px' }}>
+                          Sheet {si + 1} &mdash; {s.pieces.length} pc, {((s.usedArea / s.totalArea) * 100).toFixed(0)}%
+                        </div>
+                        <div style={{
+                          position: 'relative', width: '100%', height: 70,
+                          border: '1.5px solid #333', marginBottom: 4,
+                        }}>
+                          {s.pieces.map((p, pi) => (
+                            <div key={pi} style={{
+                              position: 'absolute',
+                              left: `${(p.x / 96) * 100}%`,
+                              top: `${(p.y / 48) * 100}%`,
+                              width: `${(p.w / 96) * 100}%`,
+                              height: `${(p.h / 48) * 100}%`,
+                              border: '1px solid #333', background: '#eee',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 7, overflow: 'hidden',
+                            }}>
+                              {p.label}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                {/* SUMMARY LINE */}
                 <div style={{
                   borderTop: '1.5px solid #333', padding: '3px 0', marginTop: 4,
                   fontWeight: 600, fontSize: 9, display: 'flex', gap: 10, flexWrap: 'wrap',
                 }}>
-                  <span>Boards: {tB}</span>
-                  {sheets.length > 0 && <span>Sheets: {sheets.length}</span>}
-                  <span>Bottoms: {totalBottoms}</span>
-                  <span>Drop: {dd(tW)}&quot;</span>
-                  {sheets.length > 0 && totalSheetArea > 0 && (
-                    <span>Ply usage: {((totalSheetUsed / totalSheetArea) * 100).toFixed(0)}%</span>
-                  )}
+                  <span>{totalDrawers} drawer{totalDrawers !== 1 ? 's' : ''}</span>
+                  <span>Box: {boxSheets.length} sheet{boxSheets.length !== 1 ? 's' : ''}
+                    {totalBoxArea > 0 && ` (${((totalBoxUsed / totalBoxArea) * 100).toFixed(0)}%)`}
+                  </span>
+                  <span>Bottom: {bottomSheets.length} sheet{bottomSheets.length !== 1 ? 's' : ''}
+                    {totalBotArea > 0 && ` (${((totalBotUsed / totalBotArea) * 100).toFixed(0)}%)`}
+                  </span>
                 </div>
               </div>
             );
