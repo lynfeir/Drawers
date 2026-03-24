@@ -47,7 +47,6 @@ export default function PrintContent({ jobs }: PrintContentProps) {
               }
             });
 
-            // Group cut lines
             const grouped: typeof cutLines = [];
             cutLines.forEach((cl) => {
               const match = grouped.find(
@@ -59,48 +58,50 @@ export default function PrintContent({ jobs }: PrintContentProps) {
 
             const sheets = bottomPieces.length > 0 ? optimizeSheets(bottomPieces, 96, 48) : [];
             const totalBottoms = bottomPieces.reduce((sum, p) => sum + p.count, 0);
+            const totalSheetUsed = sheets.reduce((sum, s) => sum + s.usedArea, 0);
+            const totalSheetArea = sheets.length * 96 * 48;
             let tB = 0;
             let tW = 0;
+
+            // Pre-calculate board counts for the summary line
+            const boardCounts: string[] = [];
+            [4, 6, 8, 10].forEach((ht) => {
+              const pcs = hg[ht];
+              if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return;
+              const n = optimizeCuts(pcs, 96).length;
+              boardCounts.push(`${n}\u00d7${ht}"`);
+            });
 
             return (
               <div key={list.id}>
                 <h2>{list.name}</h2>
 
-                <h3>Material List</h3>
-                <table>
-                  <thead>
-                    <tr><th>Qty</th><th>Material</th></tr>
-                  </thead>
-                  <tbody>
-                    {[4, 6, 8, 10].map((ht) => {
-                      const pcs = hg[ht];
-                      if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return null;
-                      const boards = optimizeCuts(pcs, 96);
-                      return (
-                        <tr key={ht}>
-                          <td className="mono" style={{ fontWeight: 700 }}>{boards.length}</td>
-                          <td>96&quot; board{boards.length !== 1 ? 's' : ''} &mdash; {ht}&quot; stock</td>
-                        </tr>
-                      );
-                    })}
-                    {sheets.length > 0 && (
-                      <tr>
-                        <td className="mono" style={{ fontWeight: 700 }}>{sheets.length}</td>
-                        <td>4&prime;&times;8&prime; plywood sheet{sheets.length !== 1 ? 's' : ''} (1/4&quot;)</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+                {/* BUY LINE — compact material summary */}
+                <div style={{
+                  background: '#f0f0f0', border: '1.5px solid #333', borderRadius: 3,
+                  padding: '3px 6px', margin: '2px 0 6px', fontWeight: 700, fontSize: 9,
+                  display: 'flex', gap: 12, flexWrap: 'wrap',
+                }}>
+                  <span>BUY:</span>
+                  {boardCounts.map((bc, i) => (
+                    <span key={i}>{bc} boards</span>
+                  ))}
+                  {sheets.length > 0 && (
+                    <span>{sheets.length}\u00d7 4&prime;&times;8&prime; ply</span>
+                  )}
+                  <span style={{ marginLeft: 'auto' }}>Bottoms: {totalBottoms}</span>
+                </div>
 
+                {/* CUT LIST — compact table */}
                 <h3>Cut List</h3>
                 <table>
                   <thead>
                     <tr>
                       <th>Qty</th>
-                      <th>F/B Length</th>
-                      <th>Side Length</th>
+                      <th>F/B</th>
+                      <th>Side</th>
                       <th>Bottom</th>
-                      <th>Height</th>
+                      <th>Ht</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -116,7 +117,8 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                   </tbody>
                 </table>
 
-                <h3>Board Cutting Layout (96&quot; Boards)</h3>
+                {/* BOARD LAYOUTS — compact bars */}
+                <h3>Board Layout (96&quot;)</h3>
                 {[4, 6, 8, 10].map((ht) => {
                   const pcs = hg[ht];
                   if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return null;
@@ -124,51 +126,31 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                   tB += boards.length;
                   return (
                     <div key={ht}>
-                      <div style={{ margin: '10px 0 6px', fontWeight: 700, fontSize: 14 }}>
-                        {ht}&quot; Stock &mdash; {boards.length} board{boards.length !== 1 ? 's' : ''}
+                      <div style={{ fontWeight: 700, fontSize: 9, margin: '4px 0 1px' }}>
+                        {ht}&quot; &mdash; {boards.length} board{boards.length !== 1 ? 's' : ''}
                       </div>
                       {boards.map((b, bi) => {
                         tW += b.remaining;
                         return (
-                          <div
-                            key={bi}
-                            style={{
-                              display: 'flex',
-                              height: 24,
-                              border: '1.5px solid #333',
-                              margin: '4px 0',
-                              fontSize: 10,
-                              overflow: 'hidden',
-                            }}
-                          >
+                          <div key={bi} style={{
+                            display: 'flex', height: 16, border: '1px solid #333',
+                            margin: '1px 0', fontSize: 7, overflow: 'hidden',
+                          }}>
                             {b.pieces.map((p, pi) => (
-                              <div
-                                key={pi}
-                                style={{
-                                  width: `${((p.len / 96) * 100).toFixed(1)}%`,
-                                  background: '#ddd',
-                                  borderRight: '1.5px solid #333',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                }}
-                              >
+                              <div key={pi} style={{
+                                width: `${((p.len / 96) * 100).toFixed(1)}%`,
+                                background: '#ddd', borderRight: '1px solid #333',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                whiteSpace: 'nowrap', overflow: 'hidden',
+                              }}>
                                 {p.label}
                               </div>
                             ))}
-                            <div
-                              style={{
-                                flex: 1,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#999',
-                                fontStyle: 'italic',
-                              }}
-                            >
-                              {dd(b.remaining)}&quot; drop
+                            <div style={{
+                              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: '#999', fontStyle: 'italic',
+                            }}>
+                              {dd(b.remaining)}&quot;
                             </div>
                           </div>
                         );
@@ -177,21 +159,19 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                   );
                 })}
 
+                {/* SHEET LAYOUTS — compact */}
                 {sheets.length > 0 && (
                   <>
-                    <h3>Plywood Sheet Layout (48&quot; &times; 96&quot;)</h3>
+                    <h3>Plywood Sheets (48&quot;&times;96&quot;)</h3>
                     {sheets.map((s, si) => (
                       <div key={si}>
-                        <div style={{ margin: '8px 0 4px', fontWeight: 600, fontSize: 12 }}>
-                          Sheet {si + 1} &mdash; {s.pieces.length} piece{s.pieces.length !== 1 ? 's' : ''},{' '}
-                          {((s.usedArea / s.totalArea) * 100).toFixed(0)}% used
+                        <div style={{ fontWeight: 600, fontSize: 8, margin: '3px 0 1px' }}>
+                          Sheet {si + 1} &mdash; {s.pieces.length} pc,{' '}
+                          {((s.usedArea / s.totalArea) * 100).toFixed(0)}%
                         </div>
                         <div style={{
-                          position: 'relative',
-                          width: '100%',
-                          aspectRatio: '2/1',
-                          border: '2px solid #333',
-                          marginBottom: 8,
+                          position: 'relative', width: '100%', height: 70,
+                          border: '1.5px solid #333', marginBottom: 4,
                         }}>
                           {s.pieces.map((p, pi) => (
                             <div key={pi} style={{
@@ -200,13 +180,9 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                               top: `${(p.y / 48) * 100}%`,
                               width: `${(p.w / 96) * 100}%`,
                               height: `${(p.h / 48) * 100}%`,
-                              border: '1px solid #333',
-                              background: '#eee',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 9,
-                              overflow: 'hidden',
+                              border: '1px solid #333', background: '#eee',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 7, overflow: 'hidden',
                             }}>
                               {p.label}
                             </div>
@@ -217,28 +193,18 @@ export default function PrintContent({ jobs }: PrintContentProps) {
                   </>
                 )}
 
-                <div
-                  style={{
-                    border: '2px solid #333',
-                    padding: 12,
-                    margin: '14px 0',
-                    fontWeight: 600,
-                    fontSize: 13,
-                    lineHeight: 1.7,
-                  }}
-                >
-                  <strong>Summary:</strong> {tB} board{tB !== 1 ? 's' : ''}
-                  {[4, 6, 8, 10].map((ht) => {
-                    const pcs = hg[ht];
-                    if (!pcs || !pcs.length || pcs.every((p) => p.count === 0)) return null;
-                    return (
-                      <span key={ht}>
-                        {' '}| {ht}&quot;: {optimizeCuts(pcs, 96).length}
-                      </span>
-                    );
-                  })}
-                  {sheets.length > 0 && <> | Sheets: {sheets.length}</>}
-                  {' '}| Bottoms: {totalBottoms} | Drop: {dd(tW)}&quot;
+                {/* SUMMARY — single compact line */}
+                <div style={{
+                  borderTop: '1.5px solid #333', padding: '3px 0', marginTop: 4,
+                  fontWeight: 600, fontSize: 9, display: 'flex', gap: 10, flexWrap: 'wrap',
+                }}>
+                  <span>Boards: {tB}</span>
+                  {sheets.length > 0 && <span>Sheets: {sheets.length}</span>}
+                  <span>Bottoms: {totalBottoms}</span>
+                  <span>Drop: {dd(tW)}&quot;</span>
+                  {sheets.length > 0 && totalSheetArea > 0 && (
+                    <span>Ply usage: {((totalSheetUsed / totalSheetArea) * 100).toFixed(0)}%</span>
+                  )}
                 </div>
               </div>
             );
